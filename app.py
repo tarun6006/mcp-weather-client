@@ -444,6 +444,76 @@ def slack_events():
                 if channel:
                     slack.chat_postMessage(channel=channel, text=error_msg)
         
+        elif event_type == "message":
+            try:
+                # Handle direct messages and channel messages
+                user_text = event.get("text")
+                channel = event.get("channel")
+                user = event.get("user")
+                channel_type = event.get("channel_type")
+                subtype = event.get("subtype")
+                
+                # Skip bot messages and system messages
+                if subtype == "bot_message" or not user or not user_text:
+                    print(f"⏭️ Skipping message: subtype={subtype}, user={user}, text_present={bool(user_text)}")
+                    return "", 200
+                
+                # Skip messages from the bot itself
+                bot_user_id = None
+                try:
+                    auth_response = slack.auth_test()
+                    if auth_response["ok"]:
+                        bot_user_id = auth_response.get("user_id")
+                except:
+                    pass
+                
+                if bot_user_id and user == bot_user_id:
+                    print(f"⏭️ Skipping message from bot itself")
+                    return "", 200
+                
+                if not channel:
+                    print("❌ Missing channel in message event")
+                    return "", 200
+                
+                print(f"💬 Message from user {user} in channel {channel} (type: {channel_type})")
+                print(f"📝 Message: {user_text}")
+                
+                # For direct messages (channel_type = "im") or if bot is mentioned in text
+                is_direct_message = channel_type == "im"
+                is_bot_mentioned = bot_user_id and f"<@{bot_user_id}>" in user_text
+                
+                # Only respond to direct messages or when explicitly mentioned
+                if is_direct_message or is_bot_mentioned:
+                    print(f"🎯 Processing message (DM: {is_direct_message}, Mentioned: {is_bot_mentioned})")
+                    
+                    # Process the natural language request with Gemini + MCP
+                    resp = client.send({"text": user_text})
+                    content = resp.get("tool_result", {}).get("content", [])
+                    
+                    # Extract the response text
+                    if content and len(content) > 0:
+                        result = content[0].get("text", "No weather data received")
+                    else:
+                        result = "Error from MCP client - no content received"
+                    
+                    print(f"🤖 Sending response: {result}")
+                    
+                    # Send response back to Slack
+                    slack.chat_postMessage(channel=channel, text=result)
+                else:
+                    print(f"⏭️ Ignoring message (not DM and bot not mentioned)")
+                
+            except RequestException as e:
+                error_msg = f"Network error: {str(e)}"
+                print(f"❌ {error_msg}")
+                if channel:
+                    slack.chat_postMessage(channel=channel, text=error_msg)
+            except Exception as e:
+                error_msg = f"Error processing message: {str(e)}"
+                print(f"❌ {error_msg}")
+                if channel:
+                    slack.chat_postMessage(channel=channel, text=error_msg)
+        
         else:
             print(f"⚠️ Unhandled event type: {event_type}")
     
