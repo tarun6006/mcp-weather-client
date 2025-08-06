@@ -1,0 +1,192 @@
+# Location Extraction Configuration
+location_extraction:
+  # Stop words to filter out when extracting locations
+  stop_words:
+    - weather
+    - forecast
+    - temperature
+    - temp
+    - conditions
+    - condition
+    - what
+    - whats
+    - "what's"
+    - how
+    - hows
+    - "how's"
+    - is
+    - are
+    - the
+    - it
+    - like
+    - there
+    - today
+    - now
+    - right
+    - currently
+    - outside
+    - in
+    - at
+    - for
+    - on
+    - about
+    - around
+    - near
+    - by
+    - to
+    - of
+    - hot
+    - cold
+    - warm
+    - cool
+    - sunny
+    - rainy
+    - cloudy
+    - snowy
+    - degrees
+    - fahrenheit
+    - celsius
+    - humid
+    - dry
+    - windy
+    - good
+    - bad
+    - nice
+    - terrible
+    - great
+    - awful
+    - beautiful
+    - this
+    - that
+    - these
+    - those
+    - some
+    - any
+    - all
+    - much
+    - very
+    - really
+    - quite
+    - pretty
+    - so
+    - too
+    - enough
+    - amazing
+    - wonderful
+    - lovely
+    - fantastic
+    - destination
+    - city
+    - place
+    - country
+    - pack
+    - bring
+    - take
+    - need
+    - clothes
+    - clothing
+    - gear
+    - items
+    - travel
+    - trip
+    - visit
+    - go
+    - going
+    - do
+    - i
+    - my
+    - upcoming
+
+  # Unwanted words to remove during location cleaning
+  unwanted_words:
+    - Weather
+    - Forecast
+    - Temperature
+    - Like
+    - Right
+    - Now
+    - Today
+    - Currently
+    - Outside
+    - There
+    - This
+    - That
+    - Very
+    - Really
+    - Quite
+    - Pretty
+    - So
+    - Too
+    - Much
+    - All
+    - Some
+    - Any
+    - Amazing
+    - Beautiful
+    - Wonderful
+    - Lovely
+    - Great
+    - Fantastic
+    - Destination
+    - City
+    - Place
+    - Country
+    - Of
+    - The
+
+  # Regex patterns for location extraction (ordered by priority)
+  patterns:
+    # Direct weather queries
+    - name: "weather_location"
+      pattern: '(?:weather|forecast|temperature|conditions?|like|hot|cold|sunny|rainy)\s+(?:in|at|for)\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)'
+      description: "weather in Baltimore, how's it in Miami"
+    
+    # Location + weather
+    - name: "location_weather"
+      pattern: '([a-zA-ZÀ-ÿ\s]+?)\s+(?:weather|forecast|temperature|conditions?)'
+      description: "Baltimore weather, Miami forecast"
+    
+    # Conversational queries
+    - name: "conversational"
+      pattern: '(?:how''?s|what''?s|about)\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)'
+      description: "how's Baltimore, what about Miami"
+    
+    # Time-based queries
+    - name: "time_based"
+      pattern: '(?:now|today|currently|right\s+now)\s+(?:in|at|for)\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)'
+      description: "right now in Baltimore"
+    
+    # Clothing/gear questions
+    - name: "clothing_gear"
+      pattern: '(?:umbrella|jacket|coat|shorts|boots|hat|sunglasses|sunscreen)\s+.*?(?:in|at|for)\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)'
+      description: "umbrella/jacket/coat in New York"
+    
+    # Commute questions
+    - name: "commute"
+      pattern: '(?:walk|drive|bike|commute|travel|go).*?(?:work|school|home|office).*?(?:in|at|to)\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)'
+      description: "walk/drive/bike to work in New York"
+    
+    # Travel/packing questions with descriptive phrases
+    - name: "travel_packing"
+      pattern: '(?:pack|bring|take|need).*?(?:clothes|clothing|gear|items?).*?(?:travel|trip|visit|go|going).*?(?:to|in|at)\s+(?:the\s+)?(?:amazing\s+|beautiful\s+|wonderful\s+)?(?:destination\s+of\s+|city\s+of\s+|place\s+of\s+)?([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)'
+      description: "pack...clothes for travel to Alaska"
+    
+    # Travel queries with descriptive phrases
+    - name: "travel_descriptive"
+      pattern: '(?:travel|trip|visit|vacation|journey|going?).*?(?:to|in|at)\s+(?:the\s+)?(?:amazing\s+|beautiful\s+|wonderful\s+)?(?:destination\s+of\s+|city\s+of\s+|place\s+of\s+)?([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)'
+      description: "travel to Alaska, trip to Paris, visit to Tokyo"
+    
+    # General destination pattern with descriptive phrases
+    - name: "destination_descriptive"
+      pattern: '.*?(?:to)\s+(?:the\s+)?(?:amazing\s+|beautiful\s+|wonderful\s+|lovely\s+|great\s+|fantastic\s+)?(?:destination\s+of\s+|city\s+of\s+|place\s+of\s+|country\s+of\s+)?([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ\s]{1,30})(?:\s*[?.!]|$)'
+      description: "General 'to [location]' pattern with descriptive phrases"
+    
+    # General location pattern
+    - name: "general_location"
+      pattern: '.*?(?:in|at|for)\s+([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ\s]{1,30})(?:\s*[?.!]|$)'
+      description: "General 'in [location]' pattern for complex sentences"
+    
+    # Simple location pattern
+    - name: "simple_location"
+      pattern: '(?:^|\s)(?:in|at|for|to)\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)'
+      description: "Simple 'in Baltimore' or 'at Miami'"
