@@ -3,6 +3,8 @@ import json
 import requests
 import time
 import logging
+import yaml
+import re
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from slack_sdk import WebClient
@@ -13,6 +15,23 @@ import google.generativeai as genai
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Load configuration
+def load_config():
+    """Load configuration from YAML file"""
+    config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
+    try:
+        with open(config_path, 'r', encoding='utf-8') as file:
+            return yaml.safe_load(file)
+    except FileNotFoundError:
+        logger.error(f"Configuration file not found: {config_path}")
+        raise
+    except yaml.YAMLError as e:
+        logger.error(f"Error parsing YAML configuration: {e}")
+        raise
+
+# Global configuration
+CONFIG = load_config()
 
 def safe_print_token(token_name, token_value):
     """Safely print token information without exposing the actual value"""
@@ -146,33 +165,93 @@ class GeminiMCPClient:
     
     def _extract_location_fallback(self, user_input):
         """Enhanced fallback method to extract location from user input"""
-        import re
         
         # Clean the input
         text = user_input.lower().strip()
+        print(f"🔍 Extracting location from: '{text}'")
         
-        # Remove common weather-related words and bot mentions
-        stop_words = ['weather', 'forecast', 'temperature', 'what', 'is', 'the', 'in', 'for', 'at', 'how', 'whats', "what's"]
+        # Get patterns from configuration
+        patterns = CONFIG['location_extraction']['patterns']
+        
+        # First, try to find location using configured patterns
+        for pattern_config in patterns:
+            pattern = pattern_config['pattern']
+            pattern_name = pattern_config['name']
+            
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                location = match.group(1).strip()
+                print(f"✅ Pattern '{pattern_name}' matched: '{location}'")
+                
+                # Check if it's a ZIP code
+                if re.match(r'^\d{5}$', location):
+                    return {"zip_code": location}
+                
+                # Clean up the location name
+                location = self._clean_location_name(location)
+                if location:
+                    return {"city": location}
+        
+        # Fallback: try to extract any city-like words using stop words
+        print("🔄 Using fallback extraction...")
+        
+        # Remove bot mentions first
+        text = re.sub(r'<@[^>]+>', '', text)
+        
+        # Get stop words from configuration
+        stop_words = set(CONFIG['location_extraction']['stop_words'])
+        
         words = text.split()
-        
-        # Remove @mentions and stop words
         location_words = []
+        
         for word in words:
-            clean_word = re.sub(r'[^\w\s]', '', word)  # Remove punctuation
-            if not word.startswith('@') and clean_word not in stop_words and clean_word:
-                location_words.append(clean_word)
+            # Remove punctuation but keep the word (including accented characters)
+            clean_word = re.sub(r'[^\w\sÀ-ÿ]', '', word).lower()
+            
+            # Skip if it's a stop word, empty, or starts with @
+            if (clean_word not in stop_words and 
+                clean_word and 
+                not word.startswith('@') and
+                not clean_word.isdigit() and  # Skip standalone numbers
+                len(clean_word) > 1):  # Skip single letters
+                
+                location_words.append(word.strip('.,!?'))
         
         if location_words:
             location = " ".join(location_words).strip()
+            print(f"🔄 Fallback extracted: '{location}'")
             
-            # Check for ZIP code (5 digits)
+            # Check for ZIP code
             zip_match = re.search(r'\b\d{5}\b', location)
             if zip_match:
                 return {"zip_code": zip_match.group()}
             
-            # Otherwise treat as city
+            # Clean up the location name
+            location = self._clean_location_name(location)
             if location:
-                return {"city": location.title()}  # Capitalize for better API results
+                return {"city": location}
+        
+        print("❌ No location found")
+        return None
+    
+    def _clean_location_name(self, location):
+        """Clean and validate a location name using configuration"""
+        if not location:
+            return None
+            
+        # Remove extra whitespace and convert to title case
+        location = ' '.join(location.split()).title()
+        
+        # Get unwanted words from configuration
+        unwanted = CONFIG['location_extraction']['unwanted_words']
+        words = location.split()
+        cleaned_words = [word for word in words if word not in unwanted]
+        
+        if cleaned_words:
+            # Return the cleaned text - let the weather API validate if it's a real location
+            result = ' '.join(cleaned_words)
+            print(f"🧹 Cleaned location: '{result}'")
+            return result if len(result) > 1 else None
         
         return None
 
