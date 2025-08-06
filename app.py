@@ -267,7 +267,7 @@ app = Flask(__name__)
 
 @app.route("/slack/events", methods=["POST"])
 def slack_events():
-    """Handle Slack events with proper signature validation and challenge response"""
+    """Handle Slack events with improved signature validation and challenge response"""
     
     # Get raw payload and headers
     payload = request.get_data()
@@ -277,16 +277,7 @@ def slack_events():
     print(f"📥 Raw payload length: {len(payload)}")
     print(f"📋 Headers: {dict(headers)}")
     
-    # Validate required headers
-    if 'X-Slack-Request-Timestamp' not in headers:
-        print("❌ Missing X-Slack-Request-Timestamp header")
-        return "Missing timestamp header", 400
-    
-    if 'X-Slack-Signature' not in headers:
-        print("❌ Missing X-Slack-Signature header")
-        return "Missing signature header", 400
-    
-    # Parse JSON data
+    # Parse JSON data first to check request type
     try:
         data = request.get_json(force=True)
         if not data:
@@ -328,17 +319,74 @@ def slack_events():
         return jsonify(response_data), 200
     
     # For all other events, verify Slack signature
-    if not verifier or not slack:
-        print("❌ Slack integration not configured")
-        return "Slack integration not configured", 500
+    print(f"🔐 Checking Slack configuration...")
     
+    # Check if Slack integration is properly configured
+    if not SLACK_SECRET:
+        print("❌ SLACK_SIGNING_SECRET not configured")
+        return "Slack signing secret not configured", 500
+    
+    if not SLACK_TOKEN:
+        print("❌ SLACK_BOT_TOKEN not configured")
+        return "Slack bot token not configured", 500
+    
+    if not verifier:
+        print("❌ SignatureVerifier not initialized")
+        return "Signature verifier not initialized", 500
+    
+    # Validate required headers for signature verification
+    if 'X-Slack-Request-Timestamp' not in headers:
+        print("❌ Missing X-Slack-Request-Timestamp header")
+        return "Missing timestamp header", 400
+    
+    if 'X-Slack-Signature' not in headers:
+        print("❌ Missing X-Slack-Signature header")
+        return "Missing signature header", 400
+    
+    # Get timestamp and signature
+    timestamp = headers.get('X-Slack-Request-Timestamp')
+    signature = headers.get('X-Slack-Signature')
+    
+    print(f"🔍 Timestamp: {timestamp}")
+    print(f"🔍 Signature: {signature}")
+    print(f"🔍 Payload length: {len(payload)} bytes")
+    
+    # Check timestamp freshness (Slack requires within 5 minutes)
     try:
-        if not verifier.is_valid_request(payload, headers):
+        request_time = int(timestamp)
+        current_time = int(time.time())
+        time_diff = abs(current_time - request_time)
+        
+        print(f"🕐 Request time: {request_time}")
+        print(f"🕐 Current time: {current_time}")
+        print(f"🕐 Time difference: {time_diff} seconds")
+        
+        if time_diff > 300:  # 5 minutes
+            print(f"❌ Request too old: {time_diff} seconds")
+            return "Request timestamp too old", 400
+            
+    except ValueError as e:
+        print(f"❌ Invalid timestamp format: {e}")
+        return "Invalid timestamp", 400
+    
+    # Verify signature
+    try:
+        print(f"🔐 Verifying signature...")
+        is_valid = verifier.is_valid_request(payload, headers)
+        
+        if not is_valid:
             print("❌ Invalid Slack signature")
+            print(f"   Expected signature calculated from:")
+            print(f"   - Timestamp: {timestamp}")
+            print(f"   - Payload: {payload.decode('utf-8', errors='replace')}")
             return "Invalid signature", 403
-        print("✅ Slack signature verified")
+            
+        print("✅ Slack signature verified successfully")
+        
     except Exception as e:
         print(f"❌ Signature verification error: {e}")
+        print(f"   Error type: {type(e).__name__}")
+        print(f"   SLACK_SIGNING_SECRET length: {len(SLACK_SECRET) if SLACK_SECRET else 'None'}")
         return "Signature verification failed", 403
     
     # Handle event callbacks
