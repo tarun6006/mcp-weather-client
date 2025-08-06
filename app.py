@@ -2,12 +2,40 @@ import os
 import json
 import requests
 import time
+import logging
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from slack_sdk import WebClient
 from slack_sdk.signature import SignatureVerifier
 from requests.exceptions import RequestException
 import google.generativeai as genai
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def safe_print_token(token_name, token_value):
+    """Safely print token information without exposing the actual value"""
+    if not token_value:
+        print(f"❌ {token_name} not configured")
+        return False
+    
+    # Show only first 4 and last 4 characters for debugging
+    masked_token = f"{token_value[:4]}...{token_value[-4:]}" if len(token_value) > 8 else "***"
+    print(f"✅ {token_name} configured: {masked_token}")
+    return True
+
+def safe_debug_print(message, sensitive_data=None):
+    """Print debug information safely, masking sensitive data"""
+    if sensitive_data:
+        # Mask sensitive data if provided
+        if isinstance(sensitive_data, str) and len(sensitive_data) > 8:
+            masked = f"{sensitive_data[:4]}...{sensitive_data[-4:]}"
+        else:
+            masked = "***"
+        print(f"🔍 {message}: {masked}")
+    else:
+        print(f"🔍 {message}")
 
 load_dotenv()
 
@@ -38,7 +66,7 @@ print(f"  Full URL: {MCP_SERVER_URL}")
 
 print(f"\nGemini Configuration:")
 print(f"  Model: {GEMINI_MODEL}")
-print(f"  API Key Available: {'Yes' if GOOGLE_API_KEY else 'No'}")
+safe_print_token("GOOGLE_API_KEY", GOOGLE_API_KEY)
 
 # Configure Gemini
 if GOOGLE_API_KEY:
@@ -53,6 +81,11 @@ if GOOGLE_API_KEY:
     model = genai.GenerativeModel(GEMINI_MODEL, generation_config=generation_config)
 else:
     model = None
+
+# Initialize Slack clients with safe logging
+print(f"\nSlack Configuration:")
+safe_print_token("SLACK_BOT_TOKEN", SLACK_TOKEN)
+safe_print_token("SLACK_SIGNING_SECRET", SLACK_SECRET)
 
 slack = WebClient(token=SLACK_TOKEN)
 verifier = SignatureVerifier(SLACK_SECRET)
@@ -143,6 +176,33 @@ class GeminiMCPClient:
         
         return None
 
+    def _format_weather_response(self, tool_result, location_args, user_input):
+        """Format weather responses to be user-friendly and include requested location"""
+        
+        # Extract the requested location for display
+        requested_location = location_args.get("city", location_args.get("zip_code", "your location"))
+        
+        # Check if it's an error response
+        if "error" in tool_result.lower() or "not found" in tool_result.lower():
+            # Handle different types of errors with user-friendly messages
+            if "location not found" in tool_result.lower() or "not found" in tool_result.lower():
+                return f"I couldn't find weather information for '{requested_location}'. Please check the spelling or try a different city name or ZIP code."
+            elif "could not resolve" in tool_result.lower():
+                return f"I'm having trouble finding '{requested_location}'. Could you try with a different city name or a 5-digit ZIP code?"
+            elif "timeout" in tool_result.lower() or "network" in tool_result.lower():
+                return f"I'm having trouble getting weather data for '{requested_location}' right now. Please try again in a moment."
+            else:
+                # Generic error fallback
+                return f"I'm unable to get weather information for '{requested_location}' at the moment. Please try a different location or try again later."
+        
+        # For successful responses, make them more conversational
+        if ":" in tool_result and any(weather_word in tool_result.lower() for weather_word in ["sunny", "cloudy", "rain", "snow", "clear", "partly", "mostly", "°f", "°c"]):
+            # It's a successful weather response - make it more polite
+            return f"Here's the weather for {requested_location}: {tool_result}"
+        
+        # Fallback for other successful responses
+        return f"Weather update for {requested_location}: {tool_result}"
+
     def process_natural_language(self, user_input):
         """Use Gemini to process natural language and determine tool calls"""
         
@@ -152,7 +212,8 @@ class GeminiMCPClient:
         if not self.model:
             # No Gemini model available - use fallback only
             if fallback_location:
-                return self._call_mcp_tool("get_weather", fallback_location)
+                tool_result = self._call_mcp_tool("get_weather", fallback_location)
+                return self._format_weather_response(tool_result, fallback_location, user_input)
             return "Please specify a city or zip code for weather information."
         
         system_prompt = f"""You are a weather assistant connected to live weather data through MCP (Model Context Protocol) tools. 
@@ -209,23 +270,20 @@ Only respond with the JSON object, nothing else."""
                 if "tool" in parsed and "args" in parsed:
                     tool_result = self._call_mcp_tool(parsed["tool"], parsed["args"])
                     
-                    # Use simple formatting instead of another Gemini call to avoid rate limits
-                    if "error" in tool_result.lower():
-                        return tool_result
-                    else:
-                        # Simple formatting without additional API calls
-                        location_info = parsed["args"].get("city", parsed["args"].get("zip_code", "your location"))
-                        return f"The weather in {location_info}: {tool_result}"
+                    # Use improved formatting for all responses
+                    return self._format_weather_response(tool_result, parsed["args"], user_input)
                 else:
                     # Fallback to direct processing if Gemini response is unclear
                     if fallback_location:
-                        return self._call_mcp_tool("get_weather", fallback_location)
+                        tool_result = self._call_mcp_tool("get_weather", fallback_location)
+                        return self._format_weather_response(tool_result, fallback_location, user_input)
                     return "I couldn't understand your request. Please ask for weather information for a US city or zip code."
                     
             except json.JSONDecodeError:
                 # Fallback to direct processing if JSON parsing fails
                 if fallback_location:
-                    return self._call_mcp_tool("get_weather", fallback_location)
+                    tool_result = self._call_mcp_tool("get_weather", fallback_location)
+                    return self._format_weather_response(tool_result, fallback_location, user_input)
                 return "I had trouble processing your request. Please ask for weather information for a US city or zip code."
                 
         except Exception as e:
@@ -234,22 +292,26 @@ Only respond with the JSON object, nothing else."""
             if "429" in error_msg or "quota" in error_msg.lower():
                 print(f"⚠️ Gemini API rate limit hit, falling back to direct processing")
                 if fallback_location:
-                    return self._call_mcp_tool("get_weather", fallback_location)
+                    tool_result = self._call_mcp_tool("get_weather", fallback_location)
+                    return self._format_weather_response(tool_result, fallback_location, user_input)
                 return "Weather service is temporarily busy. Please specify a clear city name or zip code."
             else:
                 # For other errors, try fallback
                 if fallback_location:
-                    return self._call_mcp_tool("get_weather", fallback_location)
-                return f"Sorry, I encountered an error: {error_msg}"
+                    tool_result = self._call_mcp_tool("get_weather", fallback_location)
+                    return self._format_weather_response(tool_result, fallback_location, user_input)
+                return f"Sorry, I encountered an error processing your request. Please try again with a specific city name or ZIP code."
     
     def send(self, request_data):
         """Legacy method for backward compatibility"""
         if "tool" in request_data:
             # Direct tool call (for testing)
             result = self._call_mcp_tool(request_data["tool"], request_data["args"])
+            # Format the result for better user experience
+            formatted_result = self._format_weather_response(result, request_data["args"], "")
             return {
                 "tool_result": {
-                    "content": [{"type": "text", "text": result}]
+                    "content": [{"type": "text", "text": formatted_result}]
                 }
             }
         else:
@@ -264,6 +326,64 @@ Only respond with the JSON object, nothing else."""
 client = GeminiMCPClient(MCP_SERVER_URL, model)
 
 app = Flask(__name__)
+
+# Add global error handler for better debugging
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Global exception handler to catch and log all errors"""
+    import traceback
+    
+    error_details = {
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'traceback': traceback.format_exc(),
+        'request_method': request.method if request else 'Unknown',
+        'request_path': request.path if request else 'Unknown',
+        'request_data': None
+    }
+    
+    # Safely get request data (avoid logging sensitive information)
+    try:
+        if request and request.is_json:
+            json_data = request.get_json()
+            # Remove any potential sensitive fields before logging
+            if isinstance(json_data, dict):
+                safe_data = {k: v for k, v in json_data.items() 
+                           if k.lower() not in ['token', 'secret', 'key', 'password', 'signature']}
+                error_details['request_data'] = safe_data
+            else:
+                error_details['request_data'] = 'JSON data (content masked for security)'
+        elif request and request.data:
+            # Only log first 200 chars and mask any potential tokens
+            raw_data = request.data.decode('utf-8', errors='replace')[:200]
+            error_details['request_data'] = raw_data
+    except:
+        error_details['request_data'] = 'Could not parse request data'
+    
+    print(f"🚨 UNHANDLED EXCEPTION:")
+    print(f"   Type: {error_details['error_type']}")
+    print(f"   Message: {error_details['error_message']}")
+    print(f"   Method: {error_details['request_method']}")
+    print(f"   Path: {error_details['request_path']}")
+    print(f"   Request Data: {error_details['request_data']}")
+    print(f"   Full Traceback:")
+    print(error_details['traceback'])
+    
+    # Return appropriate error response
+    if request and request.path.startswith('/slack'):
+        # For Slack endpoints, always return 200 to avoid retries
+        return jsonify({
+            "error": "Internal server error",
+            "message": "The bot encountered an unexpected error. Please try again.",
+            "error_id": error_details['error_type']
+        }), 200
+    else:
+        # For other endpoints, return 500
+        return jsonify({
+            "error": "Internal server error", 
+            "message": str(e),
+            "error_type": error_details['error_type']
+        }), 500
 
 @app.route("/slack/events", methods=["POST"])
 def slack_events():
@@ -303,8 +423,8 @@ def slack_events():
         token = data.get("token")
         
         print(f"🔍 URL verification challenge received")
-        print(f"🔍 Challenge: {challenge}")
-        print(f"🔍 Token: {token}")
+        safe_debug_print("Challenge", challenge)
+        safe_debug_print("Verification Token", token)
         
         # Validate challenge parameter exists
         if not challenge:
@@ -322,12 +442,10 @@ def slack_events():
     print(f"🔐 Checking Slack configuration...")
     
     # Check if Slack integration is properly configured
-    if not SLACK_SECRET:
-        print("❌ SLACK_SIGNING_SECRET not configured")
+    if not safe_print_token("SLACK_SIGNING_SECRET", SLACK_SECRET):
         return "Slack signing secret not configured", 500
     
-    if not SLACK_TOKEN:
-        print("❌ SLACK_BOT_TOKEN not configured")
+    if not safe_print_token("SLACK_BOT_TOKEN", SLACK_TOKEN):
         return "Slack bot token not configured", 500
     
     if not verifier:
@@ -348,7 +466,7 @@ def slack_events():
     signature = headers.get('X-Slack-Signature')
     
     print(f"🔍 Timestamp: {timestamp}")
-    print(f"🔍 Signature: {signature}")
+    safe_debug_print("Signature", signature)
     print(f"🔍 Payload length: {len(payload)} bytes")
     
     # Check timestamp freshness (Slack requires within 5 minutes)
@@ -386,7 +504,7 @@ def slack_events():
     except Exception as e:
         print(f"❌ Signature verification error: {e}")
         print(f"   Error type: {type(e).__name__}")
-        print(f"   SLACK_SIGNING_SECRET length: {len(SLACK_SECRET) if SLACK_SECRET else 'None'}")
+        safe_debug_print("SLACK_SIGNING_SECRET length", len(SLACK_SECRET) if SLACK_SECRET else 'None')
         return "Signature verification failed", 403
     
     # Handle event callbacks
@@ -430,8 +548,20 @@ def slack_events():
                 
                 print(f"🤖 Sending response: {result}")
                 
-                # Send response back to Slack
-                slack.chat_postMessage(channel=channel, text=result)
+                # Send response back to Slack with error handling
+                try:
+                    if slack:
+                        response = slack.chat_postMessage(channel=channel, text=result)
+                        if response.get("ok"):
+                            print(f"✅ Message sent successfully to {channel}")
+                        else:
+                            print(f"❌ Slack API error: {response.get('error', 'Unknown error')}")
+                    else:
+                        print(f"❌ Slack client not initialized")
+                except Exception as slack_error:
+                    print(f"❌ Failed to send Slack message: {slack_error}")
+                    print(f"   Channel: {channel}")
+                    print(f"   Message: {result[:100]}...")  # First 100 chars
                 
             except RequestException as e:
                 error_msg = f"Network error: {str(e)}"
@@ -461,11 +591,15 @@ def slack_events():
                 # Skip messages from the bot itself
                 bot_user_id = None
                 try:
-                    auth_response = slack.auth_test()
-                    if auth_response["ok"]:
-                        bot_user_id = auth_response.get("user_id")
-                except:
-                    pass
+                    if slack:  # Ensure slack client exists
+                        auth_response = slack.auth_test()
+                        if auth_response and auth_response.get("ok"):
+                            bot_user_id = auth_response.get("user_id")
+                        else:
+                            print(f"⚠️ Slack auth_test failed: {auth_response}")
+                except Exception as auth_error:
+                    print(f"⚠️ Failed to get bot user ID: {auth_error}")
+                    # Continue without bot user ID - will still process messages
                 
                 if bot_user_id and user == bot_user_id:
                     print(f"⏭️ Skipping message from bot itself")
@@ -498,8 +632,20 @@ def slack_events():
                     
                     print(f"🤖 Sending response: {result}")
                     
-                    # Send response back to Slack
-                    slack.chat_postMessage(channel=channel, text=result)
+                    # Send response back to Slack with error handling
+                    try:
+                        if slack:
+                            response = slack.chat_postMessage(channel=channel, text=result)
+                            if response.get("ok"):
+                                print(f"✅ Message sent successfully to {channel}")
+                            else:
+                                print(f"❌ Slack API error: {response.get('error', 'Unknown error')}")
+                        else:
+                            print(f"❌ Slack client not initialized")
+                    except Exception as slack_error:
+                        print(f"❌ Failed to send Slack message: {slack_error}")
+                        print(f"   Channel: {channel}")
+                        print(f"   Message: {result[:100]}...")  # First 100 chars
                 else:
                     print(f"⏭️ Ignoring message (not DM and bot not mentioned)")
                 
@@ -522,110 +668,6 @@ def slack_events():
     
     # Always return 200 to acknowledge receipt
     return "", 200
-
-@app.route("/test", methods=["POST", "GET"])
-def test_weather():
-    """
-    Test endpoint that supports both natural language and direct tool calls
-    
-    POST /test with JSON:
-    - {"text": "What's the weather in Miami?"} - Natural language
-    - {"city": "Miami"} - Direct city call
-    - {"zip_code": "33101"} - Direct ZIP code call
-    
-    GET /test - Returns endpoint info
-    """
-    
-    if request.method == "GET":
-        return jsonify({
-            "endpoint": "/test",
-            "methods": ["GET", "POST"],
-            "description": "Test MCP Weather Bot functionality",
-            "examples": {
-                "natural_language": {"text": "What's the weather in Miami?"},
-                "direct_city": {"city": "Miami"},
-                "direct_zip": {"zip_code": "33101"}
-            },
-            "mcp_server_url": MCP_SERVER_URL,
-            "gemini_model": GEMINI_MODEL,
-            "status": "ready"
-        }), 200
-    
-    # Handle POST requests
-    try:
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({
-                "error": "No JSON data provided",
-                "usage": "Send JSON with 'text', 'city', or 'zip_code' parameter"
-            }), 400
-        
-        print(f"🧪 Test endpoint called with: {data}")
-        
-        # Support multiple input formats
-        if "text" in data:
-            # Natural language processing via Gemini + MCP
-            user_text = data["text"]
-            print(f"📝 Processing natural language: '{user_text}'")
-            resp = client.send({"text": user_text})
-            
-        elif "city" in data:
-            # Direct city tool call (bypass Gemini)
-            city = data["city"]
-            print(f"🏙️ Direct city call: '{city}'")
-            resp = client.send({"tool": "get_weather", "args": {"city": city}})
-            
-        elif "zip_code" in data:
-            # Direct ZIP code tool call (bypass Gemini)
-            zip_code = data["zip_code"]
-            print(f"📮 Direct ZIP call: '{zip_code}'")
-            resp = client.send({"tool": "get_weather", "args": {"zip_code": zip_code}})
-            
-        else:
-            return jsonify({
-                "error": "Invalid request format",
-                "required": "One of: 'text', 'city', or 'zip_code'",
-                "examples": {
-                    "natural_language": {"text": "weather in Phoenix"},
-                    "direct_city": {"city": "Phoenix"},
-                    "direct_zip": {"zip_code": "85044"}
-                }
-            }), 400
-        
-        # Process response
-        if not resp:
-            return jsonify({"error": "No response from MCP client"}), 500
-            
-        content = resp.get("tool_result", {}).get("content", [])
-        
-        # Extract text from the first content item
-        if content and len(content) > 0:
-            result = content[0].get("text", "No weather data received")
-            print(f"✅ Response: {result}")
-            
-            return jsonify({
-                "success": True,
-                "response": result,
-                "request": data,
-                "timestamp": time.time()
-            }), 200
-        else:
-            print("❌ No content in MCP response")
-            return jsonify({
-                "error": "No content received from MCP client",
-                "response_data": resp
-            }), 500
-            
-    except RequestException as e:
-        error_msg = f"Network error connecting to MCP server: {str(e)}"
-        print(f"❌ {error_msg}")
-        return jsonify({"error": error_msg}), 503
-        
-    except Exception as e:
-        error_msg = f"Internal error: {str(e)}"
-        print(f"❌ {error_msg}")
-        return jsonify({"error": error_msg}), 500
 
 if __name__ == "__main__":
     # Use port 5002 for local development, PORT environment variable for Cloud Run
