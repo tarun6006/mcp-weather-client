@@ -24,7 +24,11 @@ MCP_SERVER_PATH = os.getenv("MCP_SERVER_PATH", "/mcp")
 # Construct MCP server URL from components
 MCP_SERVER_URL = f"{MCP_SERVER_PROTOCOL}://{MCP_SERVER_HOST}:{MCP_SERVER_PORT}{MCP_SERVER_PATH}"
 
-# Debug: Print MCP server configuration on startup
+# Gemini AI configuration - Define variables first
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")  # Use Gemini 2.5 Pro only
+
+# Debug: Print configuration on startup
 print(f"MCP Server Configuration:")
 print(f"  Host: {MCP_SERVER_HOST}")
 print(f"  Port: {MCP_SERVER_PORT}")
@@ -35,10 +39,6 @@ print(f"  Full URL: {MCP_SERVER_URL}")
 print(f"\nGemini Configuration:")
 print(f"  Model: {GEMINI_MODEL}")
 print(f"  API Key Available: {'Yes' if GOOGLE_API_KEY else 'No'}")
-
-# Gemini AI configuration
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")  # Use Gemini 2.5 Pro only
 
 # Configure Gemini
 if GOOGLE_API_KEY:
