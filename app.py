@@ -1,6 +1,7 @@
 import os
 import json
 import requests
+import time
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from slack_sdk import WebClient
@@ -31,14 +32,25 @@ print(f"  Protocol: {MCP_SERVER_PROTOCOL}")
 print(f"  Path: {MCP_SERVER_PATH}")
 print(f"  Full URL: {MCP_SERVER_URL}")
 
+print(f"\nGemini Configuration:")
+print(f"  Model: {GEMINI_MODEL}")
+print(f"  API Key Available: {'Yes' if GOOGLE_API_KEY else 'No'}")
+
 # Gemini AI configuration
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")  # Use Gemini 2.5 Pro only
 
 # Configure Gemini
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
-    model = genai.GenerativeModel(GEMINI_MODEL)
+    # Use optimized configuration for Gemini 2.5 Pro
+    generation_config = {
+        "temperature": 0.1,
+        "top_p": 0.8,
+        "top_k": 20,
+        "max_output_tokens": 300,
+    }
+    model = genai.GenerativeModel(GEMINI_MODEL, generation_config=generation_config)
 else:
     model = None
 
@@ -99,27 +111,48 @@ class GeminiMCPClient:
         else:
             return "Unknown error occurred"
     
+    def _extract_location_fallback(self, user_input):
+        """Enhanced fallback method to extract location from user input"""
+        import re
+        
+        # Clean the input
+        text = user_input.lower().strip()
+        
+        # Remove common weather-related words and bot mentions
+        stop_words = ['weather', 'forecast', 'temperature', 'what', 'is', 'the', 'in', 'for', 'at', 'how', 'whats', "what's"]
+        words = text.split()
+        
+        # Remove @mentions and stop words
+        location_words = []
+        for word in words:
+            clean_word = re.sub(r'[^\w\s]', '', word)  # Remove punctuation
+            if not word.startswith('@') and clean_word not in stop_words and clean_word:
+                location_words.append(clean_word)
+        
+        if location_words:
+            location = " ".join(location_words).strip()
+            
+            # Check for ZIP code (5 digits)
+            zip_match = re.search(r'\b\d{5}\b', location)
+            if zip_match:
+                return {"zip_code": zip_match.group()}
+            
+            # Otherwise treat as city
+            if location:
+                return {"city": location.title()}  # Capitalize for better API results
+        
+        return None
+
     def process_natural_language(self, user_input):
         """Use Gemini to process natural language and determine tool calls"""
         
+        # First try enhanced fallback method
+        fallback_location = self._extract_location_fallback(user_input)
+        
         if not self.model:
-            # Fallback: try to extract city from user input
-            words = user_input.split()
-            if len(words) >= 1:
-                # Try to find location in the text
-                # Skip bot mentions (@bot, @weatherbot, etc.)
-                location_words = []
-                for word in words:
-                    if not word.startswith('@'):
-                        location_words.append(word)
-                
-                if location_words:
-                    location = " ".join(location_words).strip()
-                    if location.isdigit() and len(location) == 5:
-                        return self._call_mcp_tool("get_weather", {"zip_code": location})
-                    else:
-                        return self._call_mcp_tool("get_weather", {"city": location})
-            
+            # No Gemini model available - use fallback only
+            if fallback_location:
+                return self._call_mcp_tool("get_weather", fallback_location)
             return "Please specify a city or zip code for weather information."
         
         system_prompt = f"""You are a weather assistant connected to live weather data through MCP (Model Context Protocol) tools. 
@@ -176,33 +209,38 @@ Only respond with the JSON object, nothing else."""
                 if "tool" in parsed and "args" in parsed:
                     tool_result = self._call_mcp_tool(parsed["tool"], parsed["args"])
                     
-                    # Use Gemini to format the response naturally
-                    format_prompt = f"""Format this real-time weather information in a natural, conversational way:
-
-Live weather data from MCP tools: {tool_result}
-Original request: {user_input}
-
-Instructions:
-1. Respond in a friendly, natural way as if you're personally telling someone about the weather
-2. Keep it concise and conversational
-3. You may mention that this is current/live data if appropriate
-4. Don't add information not provided in the weather data
-
-Example formats:
-- "It's currently sunny and 75°F in Miami!"
-- "Right now in Seattle, it's mostly cloudy at 68°F"
-- "The current conditions in 90210 show partly sunny skies with a temperature of 82°F"""
-                    
-                    format_response = self.model.generate_content(format_prompt)
-                    return format_response.text.strip()
+                    # Use simple formatting instead of another Gemini call to avoid rate limits
+                    if "error" in tool_result.lower():
+                        return tool_result
+                    else:
+                        # Simple formatting without additional API calls
+                        location_info = parsed["args"].get("city", parsed["args"].get("zip_code", "your location"))
+                        return f"The weather in {location_info}: {tool_result}"
                 else:
+                    # Fallback to direct processing if Gemini response is unclear
+                    if fallback_location:
+                        return self._call_mcp_tool("get_weather", fallback_location)
                     return "I couldn't understand your request. Please ask for weather information for a US city or zip code."
                     
             except json.JSONDecodeError:
+                # Fallback to direct processing if JSON parsing fails
+                if fallback_location:
+                    return self._call_mcp_tool("get_weather", fallback_location)
                 return "I had trouble processing your request. Please ask for weather information for a US city or zip code."
                 
         except Exception as e:
-            return f"Sorry, I encountered an error: {str(e)}"
+            error_msg = str(e)
+            # Handle rate limiting specifically
+            if "429" in error_msg or "quota" in error_msg.lower():
+                print(f"⚠️ Gemini API rate limit hit, falling back to direct processing")
+                if fallback_location:
+                    return self._call_mcp_tool("get_weather", fallback_location)
+                return "Weather service is temporarily busy. Please specify a clear city name or zip code."
+            else:
+                # For other errors, try fallback
+                if fallback_location:
+                    return self._call_mcp_tool("get_weather", fallback_location)
+                return f"Sorry, I encountered an error: {error_msg}"
     
     def send(self, request_data):
         """Legacy method for backward compatibility"""
@@ -229,67 +267,247 @@ app = Flask(__name__)
 
 @app.route("/slack/events", methods=["POST"])
 def slack_events():
+    """Handle Slack events with proper signature validation and challenge response"""
+    
+    # Get raw payload and headers
     payload = request.get_data()
     headers = request.headers
-    if not verifier.is_valid_request(payload, headers):
-        return "Invalid signature", 403
-    data = request.json
-    if data.get("type") == "url_verification":
-        return jsonify({"challenge": data["challenge"]})
-    event = data.get("event", {})
-    if event.get("type") == "app_mention":
-        try:
-            # Get the full user message
-            user_text = event["text"]
+    
+    print(f"🔍 Slack events endpoint called")
+    print(f"📥 Raw payload length: {len(payload)}")
+    print(f"📋 Headers: {dict(headers)}")
+    
+    # Validate required headers
+    if 'X-Slack-Request-Timestamp' not in headers:
+        print("❌ Missing X-Slack-Request-Timestamp header")
+        return "Missing timestamp header", 400
+    
+    if 'X-Slack-Signature' not in headers:
+        print("❌ Missing X-Slack-Signature header")
+        return "Missing signature header", 400
+    
+    # Parse JSON data
+    try:
+        data = request.get_json(force=True)
+        if not data:
+            print("❌ No JSON data received")
+            return "No JSON data", 400
             
-            # Use Gemini to process the natural language request
-            resp = client.send({"text": user_text})
-            content = resp.get("tool_result", {}).get("content", [])
-            
-            # Extract text from the first content item
-            if content and len(content) > 0:
-                result = content[0].get("text", "No weather data received")
-            else:
-                result = "Error from MCP client - no content received"
+        print(f"📄 Parsed JSON: {data}")
+    except Exception as e:
+        print(f"❌ Failed to parse JSON: {e}")
+        return "Invalid JSON", 400
+    
+    # Validate mandatory Slack parameters
+    if not data.get("type"):
+        print("❌ Missing 'type' parameter in request")
+        return "Missing type parameter", 400
+    
+    request_type = data.get("type")
+    print(f"🔍 Request type: {request_type}")
+    
+    # Handle URL verification challenge FIRST (before signature verification)
+    if request_type == "url_verification":
+        challenge = data.get("challenge")
+        token = data.get("token")
+        
+        print(f"🔍 URL verification challenge received")
+        print(f"🔍 Challenge: {challenge}")
+        print(f"🔍 Token: {token}")
+        
+        # Validate challenge parameter exists
+        if not challenge:
+            print("❌ Missing challenge parameter")
+            return "Missing challenge parameter", 400
+        
+        # For URL verification, Slack doesn't require signature validation
+        # Return the challenge exactly as received
+        response_data = {"challenge": challenge}
+        print(f"🔍 Responding with: {response_data}")
+        
+        return jsonify(response_data), 200
+    
+    # For all other events, verify Slack signature
+    if not verifier or not slack:
+        print("❌ Slack integration not configured")
+        return "Slack integration not configured", 500
+    
+    try:
+        if not verifier.is_valid_request(payload, headers):
+            print("❌ Invalid Slack signature")
+            return "Invalid signature", 403
+        print("✅ Slack signature verified")
+    except Exception as e:
+        print(f"❌ Signature verification error: {e}")
+        return "Signature verification failed", 403
+    
+    # Handle event callbacks
+    if request_type == "event_callback":
+        event = data.get("event", {})
+        
+        if not event:
+            print("❌ Missing event data in event_callback")
+            return "Missing event data", 400
+        
+        event_type = event.get("type")
+        print(f"🔍 Event type: {event_type}")
+        
+        if event_type == "app_mention":
+            try:
+                # Validate required event parameters
+                user_text = event.get("text")
+                channel = event.get("channel")
+                user = event.get("user")
                 
-            slack.chat_postMessage(channel=event["channel"], text=result)
-        except RequestException as e:
-            slack.chat_postMessage(channel=event["channel"], text=f"Network error: {e}")
-        except Exception as e:
-            slack.chat_postMessage(channel=event["channel"], text=f"Error: {e}")
+                if not user_text:
+                    print("❌ Missing text in app_mention event")
+                    return "", 200  # Return 200 to acknowledge receipt
+                
+                if not channel:
+                    print("❌ Missing channel in app_mention event")
+                    return "", 200
+                
+                print(f"📩 App mention from user {user} in channel {channel}")
+                print(f"📝 Message: {user_text}")
+                
+                # Process the natural language request with Gemini + MCP
+                resp = client.send({"text": user_text})
+                content = resp.get("tool_result", {}).get("content", [])
+                
+                # Extract the response text
+                if content and len(content) > 0:
+                    result = content[0].get("text", "No weather data received")
+                else:
+                    result = "Error from MCP client - no content received"
+                
+                print(f"🤖 Sending response: {result}")
+                
+                # Send response back to Slack
+                slack.chat_postMessage(channel=channel, text=result)
+                
+            except RequestException as e:
+                error_msg = f"Network error: {str(e)}"
+                print(f"❌ {error_msg}")
+                if channel:
+                    slack.chat_postMessage(channel=channel, text=error_msg)
+            except Exception as e:
+                error_msg = f"Error processing request: {str(e)}"
+                print(f"❌ {error_msg}")
+                if channel:
+                    slack.chat_postMessage(channel=channel, text=error_msg)
+        
+        else:
+            print(f"⚠️ Unhandled event type: {event_type}")
+    
+    else:
+        print(f"⚠️ Unhandled request type: {request_type}")
+    
+    # Always return 200 to acknowledge receipt
     return "", 200
 
-@app.route("/test", methods=["POST"])
+@app.route("/test", methods=["POST", "GET"])
 def test_weather():
-    """Test endpoint that supports both natural language and direct tool calls"""
+    """
+    Test endpoint that supports both natural language and direct tool calls
+    
+    POST /test with JSON:
+    - {"text": "What's the weather in Miami?"} - Natural language
+    - {"city": "Miami"} - Direct city call
+    - {"zip_code": "33101"} - Direct ZIP code call
+    
+    GET /test - Returns endpoint info
+    """
+    
+    if request.method == "GET":
+        return jsonify({
+            "endpoint": "/test",
+            "methods": ["GET", "POST"],
+            "description": "Test MCP Weather Bot functionality",
+            "examples": {
+                "natural_language": {"text": "What's the weather in Miami?"},
+                "direct_city": {"city": "Miami"},
+                "direct_zip": {"zip_code": "33101"}
+            },
+            "mcp_server_url": MCP_SERVER_URL,
+            "gemini_model": GEMINI_MODEL,
+            "status": "ready"
+        }), 200
+    
+    # Handle POST requests
     try:
         data = request.get_json()
         
-        # Support both natural language and direct tool calls
-        if "text" in data:
-            # Natural language processing
-            resp = client.send({"text": data["text"]})
-        elif "city" in data:
-            # Direct tool call (backward compatibility)
-            resp = client.send({"tool": "get_weather", "args": {"city": data["city"]}})
-        elif "zip_code" in data:
-            # Direct tool call with zip code
-            resp = client.send({"tool": "get_weather", "args": {"zip_code": data["zip_code"]}})
-        else:
-            return jsonify({"error": "Provide 'text' for natural language or 'city'/'zip_code' for direct call"}), 400
+        if not data:
+            return jsonify({
+                "error": "No JSON data provided",
+                "usage": "Send JSON with 'text', 'city', or 'zip_code' parameter"
+            }), 400
         
+        print(f"🧪 Test endpoint called with: {data}")
+        
+        # Support multiple input formats
+        if "text" in data:
+            # Natural language processing via Gemini + MCP
+            user_text = data["text"]
+            print(f"📝 Processing natural language: '{user_text}'")
+            resp = client.send({"text": user_text})
+            
+        elif "city" in data:
+            # Direct city tool call (bypass Gemini)
+            city = data["city"]
+            print(f"🏙️ Direct city call: '{city}'")
+            resp = client.send({"tool": "get_weather", "args": {"city": city}})
+            
+        elif "zip_code" in data:
+            # Direct ZIP code tool call (bypass Gemini)
+            zip_code = data["zip_code"]
+            print(f"📮 Direct ZIP call: '{zip_code}'")
+            resp = client.send({"tool": "get_weather", "args": {"zip_code": zip_code}})
+            
+        else:
+            return jsonify({
+                "error": "Invalid request format",
+                "required": "One of: 'text', 'city', or 'zip_code'",
+                "examples": {
+                    "natural_language": {"text": "weather in Phoenix"},
+                    "direct_city": {"city": "Phoenix"},
+                    "direct_zip": {"zip_code": "85044"}
+                }
+            }), 400
+        
+        # Process response
+        if not resp:
+            return jsonify({"error": "No response from MCP client"}), 500
+            
         content = resp.get("tool_result", {}).get("content", [])
         
         # Extract text from the first content item
         if content and len(content) > 0:
             result = content[0].get("text", "No weather data received")
-        else:
-            result = "Error from MCP client - no content received"
+            print(f"✅ Response: {result}")
             
-        return jsonify({"response": result}), 200
+            return jsonify({
+                "success": True,
+                "response": result,
+                "request": data,
+                "timestamp": time.time()
+            }), 200
+        else:
+            print("❌ No content in MCP response")
+            return jsonify({
+                "error": "No content received from MCP client",
+                "response_data": resp
+            }), 500
+            
+    except RequestException as e:
+        error_msg = f"Network error connecting to MCP server: {str(e)}"
+        print(f"❌ {error_msg}")
+        return jsonify({"error": error_msg}), 503
         
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        error_msg = f"Internal error: {str(e)}"
+        print(f"❌ {error_msg}")
+        return jsonify({"error": error_msg}), 500
 
 if __name__ == "__main__":
     # Use port 5002 for local development, PORT environment variable for Cloud Run
