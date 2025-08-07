@@ -12,11 +12,18 @@ from slack_sdk.signature import SignatureVerifier
 from requests.exceptions import RequestException
 import google.generativeai as genai
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]
+)
 logger = logging.getLogger(__name__)
 
-# Load configuration
+# Reduce noise from external libraries
+logging.getLogger('slack_sdk').setLevel(logging.WARNING)
+logging.getLogger('urllib3').setLevel(logging.WARNING)
+logging.getLogger('requests').setLevel(logging.WARNING)
+
 def load_config():
     """Load configuration from YAML file"""
     config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
@@ -30,31 +37,30 @@ def load_config():
         logger.error(f"Error parsing YAML configuration: {e}")
         raise
 
-# Global configuration
 CONFIG = load_config()
 
-def safe_print_token(token_name, token_value):
-    """Safely print token information without exposing the actual value"""
+def safe_log_token(token_name, token_value):
+    """Safely log token information without exposing the actual value"""
     if not token_value:
-        print(f"❌ {token_name} not configured")
+        logger.error(f"{token_name} not configured")
         return False
     
     # Show only first 4 and last 4 characters for debugging
     masked_token = f"{token_value[:4]}...{token_value[-4:]}" if len(token_value) > 8 else "***"
-    print(f"✅ {token_name} configured: {masked_token}")
+    logger.info(f"{token_name} configured: {masked_token}")
     return True
 
-def safe_debug_print(message, sensitive_data=None):
-    """Print debug information safely, masking sensitive data"""
+def safe_debug_log(message, sensitive_data=None):
+    """Log debug information safely, masking sensitive data"""
     if sensitive_data:
         # Mask sensitive data if provided
         if isinstance(sensitive_data, str) and len(sensitive_data) > 8:
             masked = f"{sensitive_data[:4]}...{sensitive_data[-4:]}"
         else:
             masked = "***"
-        print(f"🔍 {message}: {masked}")
+        logger.debug(f"{message}: {masked}")
     else:
-        print(f"🔍 {message}")
+        logger.debug(message)
 
 load_dotenv()
 
@@ -62,35 +68,28 @@ load_dotenv()
 SLACK_SECRET = os.getenv("SLACK_SIGNING_SECRET")
 SLACK_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 
-# MCP Server configuration - use individual components
 MCP_SERVER_HOST = os.getenv("MCP_SERVER_HOST", "localhost")
 MCP_SERVER_PORT = int(os.getenv("MCP_SERVER_PORT", "5001"))
 MCP_SERVER_PROTOCOL = os.getenv("MCP_SERVER_PROTOCOL", "http")
 MCP_SERVER_PATH = os.getenv("MCP_SERVER_PATH", "/mcp")
 
-# Construct MCP server URL from components
 MCP_SERVER_URL = f"{MCP_SERVER_PROTOCOL}://{MCP_SERVER_HOST}:{MCP_SERVER_PORT}{MCP_SERVER_PATH}"
 
-# Gemini AI configuration - Define variables first
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")  # Use Gemini 2.5 Pro only
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
 
-# Debug: Print configuration on startup
-print(f"MCP Server Configuration:")
-print(f"  Host: {MCP_SERVER_HOST}")
-print(f"  Port: {MCP_SERVER_PORT}")
-print(f"  Protocol: {MCP_SERVER_PROTOCOL}")
-print(f"  Path: {MCP_SERVER_PATH}")
-print(f"  Full URL: {MCP_SERVER_URL}")
+logger.info("MCP Server Configuration:")
+logger.info(f"  Host: {MCP_SERVER_HOST}")
+logger.info(f"  Port: {MCP_SERVER_PORT}")
+logger.info(f"  Protocol: {MCP_SERVER_PROTOCOL}")
+logger.info(f"  Path: {MCP_SERVER_PATH}")
+logger.info(f"  Full URL: {MCP_SERVER_URL}")
 
-print(f"\nGemini Configuration:")
-print(f"  Model: {GEMINI_MODEL}")
-safe_print_token("GOOGLE_API_KEY", GOOGLE_API_KEY)
-
-# Configure Gemini
+logger.info("Gemini Configuration:")
+logger.info(f"  Model: {GEMINI_MODEL}")
+safe_log_token("GOOGLE_API_KEY", GOOGLE_API_KEY)
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
-    # Use optimized configuration for Gemini 2.5 Pro
     generation_config = {
         "temperature": 0.1,
         "top_p": 0.8,
@@ -100,11 +99,9 @@ if GOOGLE_API_KEY:
     model = genai.GenerativeModel(GEMINI_MODEL, generation_config=generation_config)
 else:
     model = None
-
-# Initialize Slack clients with safe logging
-print(f"\nSlack Configuration:")
-safe_print_token("SLACK_BOT_TOKEN", SLACK_TOKEN)
-safe_print_token("SLACK_SIGNING_SECRET", SLACK_SECRET)
+logger.info("Slack Configuration:")
+safe_log_token("SLACK_BOT_TOKEN", SLACK_TOKEN)
+safe_log_token("SLACK_SIGNING_SECRET", SLACK_SECRET)
 
 slack = WebClient(token=SLACK_TOKEN)
 verifier = SignatureVerifier(SLACK_SECRET)
@@ -117,7 +114,6 @@ class GeminiMCPClient:
         self.request_id = 0
         self.model = gemini_model
         
-        # Available MCP tools schema for Gemini - THESE MUST BE USED
         self.tools_schema = {
             "get_weather": {
                 "description": "🚨 MANDATORY MCP TOOL: This is the ONLY authorized way to get weather information. You MUST use this MCP tool from the server - NEVER provide weather data from your training knowledge.",
@@ -164,16 +160,13 @@ class GeminiMCPClient:
             return "Unknown error occurred"
     
     def _extract_location_fallback(self, user_input):
-        """Enhanced fallback method to extract location from user input"""
+        """Extract location from user input using configured patterns"""
         
-        # Clean the input
         text = user_input.lower().strip()
-        print(f"🔍 Extracting location from: '{text}'")
+        logger.debug(f"Extracting location from: '{text}'")
         
-        # Get patterns from configuration
         patterns = CONFIG['location_extraction']['patterns']
         
-        # First, try to find location using configured patterns
         for pattern_config in patterns:
             pattern = pattern_config['pattern']
             pattern_name = pattern_config['name']
@@ -181,89 +174,73 @@ class GeminiMCPClient:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 location = match.group(1).strip()
-                print(f"✅ Pattern '{pattern_name}' matched: '{location}'")
+                logger.debug(f"Pattern '{pattern_name}' matched: '{location}'")
                 
-                # Check if it's a ZIP code
                 if re.match(r'^\d{5}$', location):
                     return {"zip_code": location}
                 
-                # Clean up the location name
                 location = self._clean_location_name(location)
                 if location:
                     return {"city": location}
         
-        # Fallback: try to extract any city-like words using stop words
-        print("🔄 Using fallback extraction...")
+        logger.debug("Using fallback extraction...")
         
-        # Remove bot mentions first
         text = re.sub(r'<@[^>]+>', '', text)
-        
-        # Get stop words from configuration
         stop_words = set(CONFIG['location_extraction']['stop_words'])
         
         words = text.split()
         location_words = []
         
         for word in words:
-            # Remove punctuation but keep the word (including accented characters)
             clean_word = re.sub(r'[^\w\sÀ-ÿ]', '', word).lower()
             
-            # Skip if it's a stop word, empty, or starts with @
             if (clean_word not in stop_words and 
                 clean_word and 
                 not word.startswith('@') and
-                not clean_word.isdigit() and  # Skip standalone numbers
-                len(clean_word) > 1):  # Skip single letters
+                not clean_word.isdigit() and
+                len(clean_word) > 1):
                 
                 location_words.append(word.strip('.,!?'))
         
         if location_words:
             location = " ".join(location_words).strip()
-            print(f"🔄 Fallback extracted: '{location}'")
+            logger.debug(f"Fallback extracted: '{location}'")
             
-            # Check for ZIP code
             zip_match = re.search(r'\b\d{5}\b', location)
             if zip_match:
                 return {"zip_code": zip_match.group()}
             
-            # Clean up the location name
             location = self._clean_location_name(location)
             if location:
                 return {"city": location}
         
-        print("❌ No location found")
+        logger.debug("No location found")
         return None
     
     def _clean_location_name(self, location):
-        """Clean and validate a location name using configuration"""
+        """Clean and validate location name"""
         if not location:
             return None
             
-        # Remove extra whitespace and convert to title case
         location = ' '.join(location.split()).title()
         
-        # Get unwanted words from configuration
         unwanted = CONFIG['location_extraction']['unwanted_words']
         words = location.split()
         cleaned_words = [word for word in words if word not in unwanted]
         
         if cleaned_words:
-            # Return the cleaned text - let the weather API validate if it's a real location
             result = ' '.join(cleaned_words)
-            print(f"🧹 Cleaned location: '{result}'")
+            logger.debug(f"Cleaned location: '{result}'")
             return result if len(result) > 1 else None
         
         return None
 
     def _format_weather_response(self, tool_result, location_args, user_input):
-        """Format weather responses to be user-friendly and include requested location"""
+        """Format weather responses to be user-friendly"""
         
-        # Extract the requested location for display
         requested_location = location_args.get("city", location_args.get("zip_code", "your location"))
         
-        # Check if it's an error response
         if "error" in tool_result.lower() or "not found" in tool_result.lower():
-            # Handle different types of errors with user-friendly messages
             if "location not found" in tool_result.lower() or "not found" in tool_result.lower():
                 return f"I couldn't find weather information for '{requested_location}'. Please check the spelling or try a different city name or ZIP code."
             elif "could not resolve" in tool_result.lower():
@@ -271,25 +248,19 @@ class GeminiMCPClient:
             elif "timeout" in tool_result.lower() or "network" in tool_result.lower():
                 return f"I'm having trouble getting weather data for '{requested_location}' right now. Please try again in a moment."
             else:
-                # Generic error fallback
                 return f"I'm unable to get weather information for '{requested_location}' at the moment. Please try a different location or try again later."
         
-        # For successful responses, make them more conversational
         if ":" in tool_result and any(weather_word in tool_result.lower() for weather_word in ["sunny", "cloudy", "rain", "snow", "clear", "partly", "mostly", "°f", "°c"]):
-            # It's a successful weather response - make it more polite
             return f"Here's the weather for {requested_location}: {tool_result}"
         
-        # Fallback for other successful responses
         return f"Weather update for {requested_location}: {tool_result}"
 
     def process_natural_language(self, user_input):
-        """Use Gemini to process natural language and determine tool calls"""
+        """Process natural language using Gemini and call appropriate tools"""
         
-        # First try enhanced fallback method
         fallback_location = self._extract_location_fallback(user_input)
         
         if not self.model:
-            # No Gemini model available - use fallback only
             if fallback_location:
                 tool_result = self._call_mcp_tool("get_weather", fallback_location)
                 return self._format_weather_response(tool_result, fallback_location, user_input)
@@ -369,13 +340,14 @@ Only respond with the JSON object, nothing else."""
             error_msg = str(e)
             # Handle rate limiting specifically
             if "429" in error_msg or "quota" in error_msg.lower():
-                print(f"⚠️ Gemini API rate limit hit, falling back to direct processing")
+                logger.warning("Gemini API rate limit hit, falling back to direct processing")
                 if fallback_location:
                     tool_result = self._call_mcp_tool("get_weather", fallback_location)
                     return self._format_weather_response(tool_result, fallback_location, user_input)
                 return "Weather service is temporarily busy. Please specify a clear city name or zip code."
             else:
                 # For other errors, try fallback
+                logger.error(f"Gemini API error: {error_msg}")
                 if fallback_location:
                     tool_result = self._call_mcp_tool("get_weather", fallback_location)
                     return self._format_weather_response(tool_result, fallback_location, user_input)
@@ -406,7 +378,48 @@ client = GeminiMCPClient(MCP_SERVER_URL, model)
 
 app = Flask(__name__)
 
-# Add global error handler for better debugging
+processed_messages = {}
+MAX_PROCESSED_MESSAGES = 1000
+MESSAGE_EXPIRY_SECONDS = 300
+
+def cleanup_expired_messages():
+    """Remove expired messages from the processed set"""
+    current_time = time.time()
+    expired_keys = [
+        key for key, timestamp in processed_messages.items()
+        if current_time - timestamp > MESSAGE_EXPIRY_SECONDS
+    ]
+    for key in expired_keys:
+        processed_messages.pop(key, None)
+    
+    if len(processed_messages) > MAX_PROCESSED_MESSAGES:
+        sorted_items = sorted(processed_messages.items(), key=lambda x: x[1])
+        for key, _ in sorted_items[:100]:
+            processed_messages.pop(key, None)
+
+def is_message_processed(message_key):
+    """Check if a message has already been processed"""
+    cleanup_expired_messages()
+    return message_key in processed_messages
+
+def mark_message_processed(message_key):
+    """Mark a message as processed with current timestamp"""
+    processed_messages[message_key] = time.time()
+
+user_last_request = {}
+MIN_REQUEST_INTERVAL = 2
+
+def is_rate_limited(user_id):
+    """Check if user is making requests too quickly"""
+    current_time = time.time()
+    last_request_time = user_last_request.get(user_id, 0)
+    
+    if current_time - last_request_time < MIN_REQUEST_INTERVAL:
+        return True
+    
+    user_last_request[user_id] = current_time
+    return False
+
 @app.errorhandler(Exception)
 def handle_exception(e):
     """Global exception handler to catch and log all errors"""
@@ -439,25 +452,22 @@ def handle_exception(e):
     except:
         error_details['request_data'] = 'Could not parse request data'
     
-    print(f"🚨 UNHANDLED EXCEPTION:")
-    print(f"   Type: {error_details['error_type']}")
-    print(f"   Message: {error_details['error_message']}")
-    print(f"   Method: {error_details['request_method']}")
-    print(f"   Path: {error_details['request_path']}")
-    print(f"   Request Data: {error_details['request_data']}")
-    print(f"   Full Traceback:")
-    print(error_details['traceback'])
+    logger.error("UNHANDLED EXCEPTION:")
+    logger.error(f"   Type: {error_details['error_type']}")
+    logger.error(f"   Message: {error_details['error_message']}")
+    logger.error(f"   Method: {error_details['request_method']}")
+    logger.error(f"   Path: {error_details['request_path']}")
+    logger.error(f"   Request Data: {error_details['request_data']}")
+    logger.error("   Full Traceback:")
+    logger.error(error_details['traceback'])
     
-    # Return appropriate error response
     if request and request.path.startswith('/slack'):
-        # For Slack endpoints, always return 200 to avoid retries
         return jsonify({
             "error": "Internal server error",
             "message": "The bot encountered an unexpected error. Please try again.",
             "error_id": error_details['error_type']
         }), 200
     else:
-        # For other endpoints, return 500
         return jsonify({
             "error": "Internal server error", 
             "message": str(e),
@@ -466,154 +476,173 @@ def handle_exception(e):
 
 @app.route("/slack/events", methods=["POST"])
 def slack_events():
-    """Handle Slack events with improved signature validation and challenge response"""
+    """Handle Slack events with signature validation and challenge response"""
     
-    # Get raw payload and headers
     payload = request.get_data()
     headers = request.headers
     
-    print(f"🔍 Slack events endpoint called")
-    print(f"📥 Raw payload length: {len(payload)}")
-    print(f"📋 Headers: {dict(headers)}")
+    logger.info("Slack events endpoint called")
+    logger.debug(f"Raw payload length: {len(payload)}")
+    logger.debug(f"Headers: {dict(headers)}")
     
-    # Parse JSON data first to check request type
     try:
         data = request.get_json(force=True)
         if not data:
-            print("❌ No JSON data received")
+            logger.error("No JSON data received")
             return "No JSON data", 400
             
-        print(f"📄 Parsed JSON: {data}")
+        logger.debug(f"Parsed JSON: {data}")
     except Exception as e:
-        print(f"❌ Failed to parse JSON: {e}")
+        logger.error(f"Failed to parse JSON: {e}")
         return "Invalid JSON", 400
     
-    # Validate mandatory Slack parameters
     if not data.get("type"):
-        print("❌ Missing 'type' parameter in request")
+        logger.error("Missing 'type' parameter in request")
         return "Missing type parameter", 400
     
     request_type = data.get("type")
-    print(f"🔍 Request type: {request_type}")
+    logger.info(f"Request type: {request_type}")
     
-    # Handle URL verification challenge FIRST (before signature verification)
     if request_type == "url_verification":
         challenge = data.get("challenge")
         token = data.get("token")
         
-        print(f"🔍 URL verification challenge received")
-        safe_debug_print("Challenge", challenge)
-        safe_debug_print("Verification Token", token)
+        logger.info("URL verification challenge received")
+        safe_debug_log("Challenge", challenge)
+        safe_debug_log("Verification Token", token)
         
-        # Validate challenge parameter exists
         if not challenge:
-            print("❌ Missing challenge parameter")
+            logger.error("Missing challenge parameter")
             return "Missing challenge parameter", 400
         
-        # For URL verification, Slack doesn't require signature validation
-        # Return the challenge exactly as received
         response_data = {"challenge": challenge}
-        print(f"🔍 Responding with: {response_data}")
+        logger.debug(f"Responding with: {response_data}")
         
         return jsonify(response_data), 200
     
-    # For all other events, verify Slack signature
-    print(f"🔐 Checking Slack configuration...")
+    logger.debug("Checking Slack configuration...")
     
-    # Check if Slack integration is properly configured
-    if not safe_print_token("SLACK_SIGNING_SECRET", SLACK_SECRET):
+    if not safe_log_token("SLACK_SIGNING_SECRET", SLACK_SECRET):
         return "Slack signing secret not configured", 500
     
-    if not safe_print_token("SLACK_BOT_TOKEN", SLACK_TOKEN):
+    if not safe_log_token("SLACK_BOT_TOKEN", SLACK_TOKEN):
         return "Slack bot token not configured", 500
     
     if not verifier:
-        print("❌ SignatureVerifier not initialized")
+        logger.error("SignatureVerifier not initialized")
         return "Signature verifier not initialized", 500
     
-    # Validate required headers for signature verification
     if 'X-Slack-Request-Timestamp' not in headers:
-        print("❌ Missing X-Slack-Request-Timestamp header")
+        logger.error("Missing X-Slack-Request-Timestamp header")
         return "Missing timestamp header", 400
     
     if 'X-Slack-Signature' not in headers:
-        print("❌ Missing X-Slack-Signature header")
+        logger.error("Missing X-Slack-Signature header")
         return "Missing signature header", 400
     
-    # Get timestamp and signature
     timestamp = headers.get('X-Slack-Request-Timestamp')
     signature = headers.get('X-Slack-Signature')
     
-    print(f"🔍 Timestamp: {timestamp}")
-    safe_debug_print("Signature", signature)
-    print(f"🔍 Payload length: {len(payload)} bytes")
+    logger.debug(f"Timestamp: {timestamp}")
+    safe_debug_log("Signature", signature)
+    logger.debug(f"Payload length: {len(payload)} bytes")
     
-    # Check timestamp freshness (Slack requires within 5 minutes)
     try:
         request_time = int(timestamp)
         current_time = int(time.time())
         time_diff = abs(current_time - request_time)
         
-        print(f"🕐 Request time: {request_time}")
-        print(f"🕐 Current time: {current_time}")
-        print(f"🕐 Time difference: {time_diff} seconds")
+        logger.debug(f"Request time: {request_time}")
+        logger.debug(f"Current time: {current_time}")
+        logger.debug(f"Time difference: {time_diff} seconds")
         
-        if time_diff > 300:  # 5 minutes
-            print(f"❌ Request too old: {time_diff} seconds")
+        if time_diff > 300:
+            logger.warning(f"Request too old: {time_diff} seconds")
             return "Request timestamp too old", 400
             
     except ValueError as e:
-        print(f"❌ Invalid timestamp format: {e}")
+        logger.error(f"Invalid timestamp format: {e}")
         return "Invalid timestamp", 400
     
-    # Verify signature
     try:
-        print(f"🔐 Verifying signature...")
+        logger.debug("Verifying signature...")
         is_valid = verifier.is_valid_request(payload, headers)
         
         if not is_valid:
-            print("❌ Invalid Slack signature")
-            print(f"   Expected signature calculated from:")
-            print(f"   - Timestamp: {timestamp}")
-            print(f"   - Payload: {payload.decode('utf-8', errors='replace')}")
+            logger.error("Invalid Slack signature")
+            logger.error(f"   Expected signature calculated from:")
+            logger.error(f"   - Timestamp: {timestamp}")
+            logger.error(f"   - Payload: {payload.decode('utf-8', errors='replace')}")
             return "Invalid signature", 403
             
-        print("✅ Slack signature verified successfully")
+        logger.debug("Slack signature verified successfully")
         
     except Exception as e:
-        print(f"❌ Signature verification error: {e}")
-        print(f"   Error type: {type(e).__name__}")
-        safe_debug_print("SLACK_SIGNING_SECRET length", len(SLACK_SECRET) if SLACK_SECRET else 'None')
+        logger.error(f"Signature verification error: {e}")
+        logger.error(f"   Error type: {type(e).__name__}")
+        safe_debug_log("SLACK_SIGNING_SECRET length", len(SLACK_SECRET) if SLACK_SECRET else 'None')
         return "Signature verification failed", 403
     
-    # Handle event callbacks
     if request_type == "event_callback":
         event = data.get("event", {})
         
         if not event:
-            print("❌ Missing event data in event_callback")
+            logger.error("Missing event data in event_callback")
             return "Missing event data", 400
         
         event_type = event.get("type")
-        print(f"🔍 Event type: {event_type}")
+        logger.info(f"Event type: {event_type}")
         
         if event_type == "app_mention":
             try:
-                # Validate required event parameters
                 user_text = event.get("text")
                 channel = event.get("channel")
                 user = event.get("user")
+                event_ts = event.get("ts")
                 
                 if not user_text:
-                    print("❌ Missing text in app_mention event")
-                    return "", 200  # Return 200 to acknowledge receipt
-                
-                if not channel:
-                    print("❌ Missing channel in app_mention event")
+                    logger.error("Missing text in app_mention event")
                     return "", 200
                 
-                print(f"📩 App mention from user {user} in channel {channel}")
-                print(f"📝 Message: {user_text}")
+                if not channel:
+                    logger.error("Missing channel in app_mention event")
+                    return "", 200
+                
+                if not user:
+                    logger.error("Missing user in app_mention event")
+                    return "", 200
+                
+                if not event_ts:
+                    logger.error("Missing timestamp in app_mention event")
+                    return "", 200
+                
+                if is_rate_limited(user):
+                    logger.warning(f"Rate limited user {user} - ignoring request")
+                    return "", 200
+                
+                message_key = f"mention_{channel}_{user}_{event_ts}_{hash(user_text)}"
+                
+                if is_message_processed(message_key):
+                    logger.info(f"App mention already processed: {message_key}")
+                    return "", 200
+                
+                try:
+                    event_time = float(event_ts)
+                    current_time = time.time()
+                    message_age = current_time - event_time
+                    
+                    if message_age > MESSAGE_EXPIRY_SECONDS:
+                        logger.info(f"Message too old ({message_age:.1f}s), ignoring: {message_key}")
+                        return "", 200
+                        
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Invalid event timestamp: {event_ts}, error: {e}")
+                
+                mark_message_processed(message_key)
+                
+                logger.info(f"App mention from user {user} in channel {channel}")
+                logger.debug(f"Message: {user_text}")
+                logger.debug(f"Message age: {message_age:.1f}s" if 'message_age' in locals() else "Message age: unknown")
                 
                 # Process the natural language request with Gemini + MCP
                 resp = client.send({"text": user_text})
@@ -625,31 +654,31 @@ def slack_events():
                 else:
                     result = "Error from MCP client - no content received"
                 
-                print(f"🤖 Sending response: {result}")
+                logger.info(f"Sending response: {result}")
                 
                 # Send response back to Slack with error handling
                 try:
                     if slack:
                         response = slack.chat_postMessage(channel=channel, text=result)
                         if response.get("ok"):
-                            print(f"✅ Message sent successfully to {channel}")
+                            logger.info(f"Message sent successfully to {channel}")
                         else:
-                            print(f"❌ Slack API error: {response.get('error', 'Unknown error')}")
+                            logger.error(f"Slack API error: {response.get('error', 'Unknown error')}")
                     else:
-                        print(f"❌ Slack client not initialized")
+                        logger.error("Slack client not initialized")
                 except Exception as slack_error:
-                    print(f"❌ Failed to send Slack message: {slack_error}")
-                    print(f"   Channel: {channel}")
-                    print(f"   Message: {result[:100]}...")  # First 100 chars
+                    logger.error(f"Failed to send Slack message: {slack_error}")
+                    logger.error(f"   Channel: {channel}")
+                    logger.error(f"   Message: {result[:100]}...")  # First 100 chars
                 
             except RequestException as e:
                 error_msg = f"Network error: {str(e)}"
-                print(f"❌ {error_msg}")
+                logger.error(error_msg)
                 if channel:
                     slack.chat_postMessage(channel=channel, text=error_msg)
             except Exception as e:
                 error_msg = f"Error processing request: {str(e)}"
-                print(f"❌ {error_msg}")
+                logger.error(error_msg)
                 if channel:
                     slack.chat_postMessage(channel=channel, text=error_msg)
         
@@ -661,10 +690,11 @@ def slack_events():
                 user = event.get("user")
                 channel_type = event.get("channel_type")
                 subtype = event.get("subtype")
+                event_ts = event.get("ts")  # Slack timestamp for deduplication
                 
                 # Skip bot messages and system messages
                 if subtype == "bot_message" or not user or not user_text:
-                    print(f"⏭️ Skipping message: subtype={subtype}, user={user}, text_present={bool(user_text)}")
+                    logger.debug(f"Skipping message: subtype={subtype}, user={user}, text_present={bool(user_text)}")
                     return "", 200
                 
                 # Skip messages from the bot itself
@@ -675,29 +705,62 @@ def slack_events():
                         if auth_response and auth_response.get("ok"):
                             bot_user_id = auth_response.get("user_id")
                         else:
-                            print(f"⚠️ Slack auth_test failed: {auth_response}")
+                            logger.warning(f"Slack auth_test failed: {auth_response}")
                 except Exception as auth_error:
-                    print(f"⚠️ Failed to get bot user ID: {auth_error}")
+                    logger.warning(f"Failed to get bot user ID: {auth_error}")
                     # Continue without bot user ID - will still process messages
                 
                 if bot_user_id and user == bot_user_id:
-                    print(f"⏭️ Skipping message from bot itself")
+                    logger.debug("Skipping message from bot itself")
                     return "", 200
                 
                 if not channel:
-                    print("❌ Missing channel in message event")
+                    logger.error("Missing channel in message event")
                     return "", 200
-                
-                print(f"💬 Message from user {user} in channel {channel} (type: {channel_type})")
-                print(f"📝 Message: {user_text}")
                 
                 # For direct messages (channel_type = "im") or if bot is mentioned in text
                 is_direct_message = channel_type == "im"
                 is_bot_mentioned = bot_user_id and f"<@{bot_user_id}>" in user_text
                 
-                # Only respond to direct messages or when explicitly mentioned
-                if is_direct_message or is_bot_mentioned:
-                    print(f"🎯 Processing message (DM: {is_direct_message}, Mentioned: {is_bot_mentioned})")
+                # IMPORTANT: Skip messages with bot mentions in channels since they're handled by app_mention
+                # Only process direct messages (DMs) or channel messages WITHOUT bot mentions
+                if is_bot_mentioned and not is_direct_message:
+                    logger.debug("Skipping channel message with bot mention (handled by app_mention)")
+                    return "", 200
+                
+                # Only respond to direct messages
+                if is_direct_message:
+                    # Check for rate limiting
+                    if is_rate_limited(user):
+                        logger.warning(f"Rate limited user {user} - ignoring DM")
+                        return "", 200
+                    
+                    # Create unique message key for deduplication (include message content hash)
+                    message_key = f"message_{channel}_{user}_{event_ts}_{hash(user_text)}"
+                    
+                    if is_message_processed(message_key):
+                        logger.info(f"Message already processed: {message_key}")
+                        return "", 200
+                    
+                    # Additional check for message age using event timestamp
+                    try:
+                        event_time = float(event_ts)
+                        current_time = time.time()
+                        message_age = current_time - event_time
+                        
+                        if message_age > MESSAGE_EXPIRY_SECONDS:
+                            logger.info(f"DM too old ({message_age:.1f}s), ignoring: {message_key}")
+                            return "", 200
+                            
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Invalid event timestamp: {event_ts}, error: {e}")
+                        # Continue processing but log the issue
+                    
+                    mark_message_processed(message_key)
+                    
+                    logger.info(f"Processing DM from user {user} in channel {channel}")
+                    logger.debug(f"Message: {user_text}")
+                    logger.debug(f"Message age: {message_age:.1f}s" if 'message_age' in locals() else "Message age: unknown")
                     
                     # Process the natural language request with Gemini + MCP
                     resp = client.send({"text": user_text})
@@ -709,52 +772,76 @@ def slack_events():
                     else:
                         result = "Error from MCP client - no content received"
                     
-                    print(f"🤖 Sending response: {result}")
+                    logger.info(f"Sending response: {result}")
                     
                     # Send response back to Slack with error handling
                     try:
                         if slack:
                             response = slack.chat_postMessage(channel=channel, text=result)
                             if response.get("ok"):
-                                print(f"✅ Message sent successfully to {channel}")
+                                logger.info(f"Message sent successfully to {channel}")
                             else:
-                                print(f"❌ Slack API error: {response.get('error', 'Unknown error')}")
+                                logger.error(f"Slack API error: {response.get('error', 'Unknown error')}")
                         else:
-                            print(f"❌ Slack client not initialized")
+                            logger.error("Slack client not initialized")
                     except Exception as slack_error:
-                        print(f"❌ Failed to send Slack message: {slack_error}")
-                        print(f"   Channel: {channel}")
-                        print(f"   Message: {result[:100]}...")  # First 100 chars
+                        logger.error(f"Failed to send Slack message: {slack_error}")
+                        logger.error(f"   Channel: {channel}")
+                        logger.error(f"   Message: {result[:100]}...")  # First 100 chars
                 else:
-                    print(f"⏭️ Ignoring message (not DM and bot not mentioned)")
+                    logger.debug("Ignoring message (not a DM)")
                 
             except RequestException as e:
                 error_msg = f"Network error: {str(e)}"
-                print(f"❌ {error_msg}")
+                logger.error(error_msg)
                 if channel:
                     slack.chat_postMessage(channel=channel, text=error_msg)
             except Exception as e:
                 error_msg = f"Error processing message: {str(e)}"
-                print(f"❌ {error_msg}")
+                logger.error(error_msg)
                 if channel:
                     slack.chat_postMessage(channel=channel, text=error_msg)
         
         else:
-            print(f"⚠️ Unhandled event type: {event_type}")
+            logger.warning(f"Unhandled event type: {event_type}")
     
     else:
-        print(f"⚠️ Unhandled request type: {request_type}")
+        logger.warning(f"Unhandled request type: {request_type}")
     
     # Always return 200 to acknowledge receipt
     return "", 200
 
-if __name__ == "__main__":
-    # Use port 5002 for local development, PORT environment variable for Cloud Run
-    port = int(os.environ.get("PORT", 5002))
+@app.route("/health", methods=["GET"])
+def health_check():
+    """Health check endpoint that also performs cleanup"""
+    cleanup_expired_messages()  # Clean up old messages
     
-    # Determine if running locally or on Cloud Run
+    return jsonify({
+        "status": "healthy",
+        "processed_messages_count": len(processed_messages),
+        "user_rate_limits_count": len(user_last_request),
+        "mcp_server_url": MCP_SERVER_URL,
+        "timestamp": time.time()
+    }), 200
+
+if __name__ == "__main__":
+    log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+    if log_level in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
+        logging.getLogger().setLevel(getattr(logging, log_level))
+        logger.info(f"Log level set to: {log_level}")
+    
+    port = int(os.environ.get("PORT", 5002))
     is_cloud_run = os.environ.get("K_SERVICE") is not None
     environment = "Cloud Run" if is_cloud_run else "Local"
     
-    print(f"Starting MCP client on port {port} ({environment})")
+    logger.info(f"Starting MCP Weather Bot on port {port} ({environment})")
+    logger.info("Security Features Enabled:")
+    logger.info("   - Secure logging with sensitive data masking")
+    logger.info("   - Enhanced deduplication and rate limiting")
+    logger.info("   - Request age validation and signature verification")
+    logger.info(f"Configuration:")
+    logger.info(f"   - Message expiry: {MESSAGE_EXPIRY_SECONDS} seconds")
+    logger.info(f"   - Rate limit: {MIN_REQUEST_INTERVAL} seconds between requests per user")
+    logger.info(f"   - Max processed messages: {MAX_PROCESSED_MESSAGES}")
+    
     app.run(host="0.0.0.0", port=port, debug=not is_cloud_run)
