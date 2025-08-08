@@ -5,12 +5,15 @@ import time
 import logging
 import yaml
 import re
+import uuid
+import threading
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from slack_sdk import WebClient
 from slack_sdk.signature import SignatureVerifier
 from requests.exceptions import RequestException
 import google.generativeai as genai
+import sseclient
 
 logging.basicConfig(
     level=logging.INFO,
@@ -68,22 +71,38 @@ load_dotenv()
 SLACK_SECRET = os.getenv("SLACK_SIGNING_SECRET")
 SLACK_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 
-MCP_SERVER_HOST = os.getenv("MCP_SERVER_HOST", "localhost")
-MCP_SERVER_PORT = int(os.getenv("MCP_SERVER_PORT", "5001"))
-MCP_SERVER_PROTOCOL = os.getenv("MCP_SERVER_PROTOCOL", "http")
-MCP_SERVER_PATH = os.getenv("MCP_SERVER_PATH", "/mcp")
+# Weather MCP Server Configuration
+WEATHER_MCP_HOST = os.getenv("WEATHER_MCP_HOST", "localhost")
+WEATHER_MCP_PORT = int(os.getenv("WEATHER_MCP_PORT", "5001"))
+WEATHER_MCP_PROTOCOL = os.getenv("WEATHER_MCP_PROTOCOL", "http")
+WEATHER_MCP_PATH = os.getenv("WEATHER_MCP_PATH", "/mcp")
 
-MCP_SERVER_URL = f"{MCP_SERVER_PROTOCOL}://{MCP_SERVER_HOST}:{MCP_SERVER_PORT}{MCP_SERVER_PATH}"
+WEATHER_MCP_URL = f"{WEATHER_MCP_PROTOCOL}://{WEATHER_MCP_HOST}:{WEATHER_MCP_PORT}{WEATHER_MCP_PATH}"
+
+# Calculator MCP Server Configuration
+CALC_MCP_HOST = os.getenv("CALC_MCP_HOST", "localhost")
+CALC_MCP_PORT = int(os.getenv("CALC_MCP_PORT", "5003"))
+CALC_MCP_PROTOCOL = os.getenv("CALC_MCP_PROTOCOL", "http")
+CALC_MCP_PATH = os.getenv("CALC_MCP_PATH", "/mcp")
+
+CALC_MCP_URL = f"{CALC_MCP_PROTOCOL}://{CALC_MCP_HOST}:{CALC_MCP_PORT}{CALC_MCP_PATH}"
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
 
 logger.info("MCP Server Configuration:")
-logger.info(f"  Host: {MCP_SERVER_HOST}")
-logger.info(f"  Port: {MCP_SERVER_PORT}")
-logger.info(f"  Protocol: {MCP_SERVER_PROTOCOL}")
-logger.info(f"  Path: {MCP_SERVER_PATH}")
-logger.info(f"  Full URL: {MCP_SERVER_URL}")
+logger.info("Weather MCP Server:")
+logger.info(f"  Host: {WEATHER_MCP_HOST}")
+logger.info(f"  Port: {WEATHER_MCP_PORT}")
+logger.info(f"  Protocol: {WEATHER_MCP_PROTOCOL}")
+logger.info(f"  Path: {WEATHER_MCP_PATH}")
+logger.info(f"  Full URL: {WEATHER_MCP_URL}")
+logger.info("Calculator MCP Server:")
+logger.info(f"  Host: {CALC_MCP_HOST}")
+logger.info(f"  Port: {CALC_MCP_PORT}")
+logger.info(f"  Protocol: {CALC_MCP_PROTOCOL}")
+logger.info(f"  Path: {CALC_MCP_PATH}")
+logger.info(f"  Full URL: {CALC_MCP_URL}")
 
 logger.info("Gemini Configuration:")
 logger.info(f"  Model: {GEMINI_MODEL}")
@@ -96,7 +115,30 @@ if GOOGLE_API_KEY:
         "top_k": 20,
         "max_output_tokens": 300,
     }
-    model = genai.GenerativeModel(GEMINI_MODEL, generation_config=generation_config)
+    # Configure safety settings to be less restrictive for harmless weather/math queries
+    safety_settings = [
+        {
+            "category": "HARM_CATEGORY_HARASSMENT",
+            "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+            "category": "HARM_CATEGORY_HATE_SPEECH",
+            "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+            "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+            "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+        }
+    ]
+    model = genai.GenerativeModel(
+        GEMINI_MODEL, 
+        generation_config=generation_config,
+        safety_settings=safety_settings
+    )
 else:
     model = None
 logger.info("Slack Configuration:")
@@ -106,35 +148,89 @@ safe_log_token("SLACK_SIGNING_SECRET", SLACK_SECRET)
 slack = WebClient(token=SLACK_TOKEN)
 verifier = SignatureVerifier(SLACK_SECRET)
 
-class GeminiMCPClient:
-    """MCP client that uses Gemini LLM to process natural language and call tools"""
+class SSECalculatorClient:
+    """SSE client for calculator MCP server"""
     
-    def __init__(self, server_url, gemini_model=None):
-        self.server_url = server_url
-        self.request_id = 0
-        self.model = gemini_model
+    def __init__(self, calc_server_host, calc_server_port, calc_server_protocol):
+        self.calc_server_host = calc_server_host
+        self.calc_server_port = calc_server_port
+        self.calc_server_protocol = calc_server_protocol
+        self.client_id = str(uuid.uuid4())
+        self.sse_client = None
+        self.response_queue = {}
+        self.connected = False
+        self.lock = threading.Lock()
         
-        self.tools_schema = {
-            "get_weather": {
-                "description": "🚨 MANDATORY MCP TOOL: This is the ONLY authorized way to get weather information. You MUST use this MCP tool from the server - NEVER provide weather data from your training knowledge.",
-                "parameters": {
-                    "city": "US city name (e.g., 'Miami', 'New York', 'Austin')",
-                    "zip_code": "US zip code (e.g., '90210', '10001', '33101')"
-                },
-                "usage": "⚡ REQUIRED for ALL weather queries via MCP server. Provide either city OR zip_code, not both.",
-                "coverage": "Only US locations are supported by this MCP weather service",
-                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to live weather APIs",
-                "strict_policy": "You are FORBIDDEN from answering weather questions without using this MCP tool first"
-            }
-        }
+        # Build SSE connection URL
+        port_str = f":{calc_server_port}" if calc_server_port not in ["80", "443"] else ""
+        self.sse_url = f"{calc_server_protocol}://{calc_server_host}{port_str}/sse/connect?client_id={self.client_id}"
+        self.mcp_url = f"{calc_server_protocol}://{calc_server_host}{port_str}/sse/mcp"
+        
+        self._connect()
     
-    def _call_mcp_tool(self, tool_name, arguments):
-        """Make direct call to MCP server"""
-        self.request_id += 1
+    def _connect(self):
+        """Establish SSE connection"""
+        try:
+            logger.info(f"Connecting to calculator SSE server: {self.sse_url}")
+            response = requests.get(self.sse_url, stream=True, timeout=10)
+            response.raise_for_status()
+            
+            self.sse_client = sseclient.SSEClient(response)
+            self.connected = True
+            
+            # Start background thread to handle SSE messages
+            self.sse_thread = threading.Thread(target=self._handle_sse_messages, daemon=True)
+            self.sse_thread.start()
+            
+            logger.info(f"SSE connection established with calculator server (client_id: {self.client_id})")
+            
+        except Exception as e:
+            logger.error(f"Failed to connect to calculator SSE server: {e}")
+            self.connected = False
+    
+    def _handle_sse_messages(self):
+        """Handle incoming SSE messages"""
+        try:
+            for event in self.sse_client.events():
+                if not self.connected:
+                    break
+                
+                try:
+                    data = json.loads(event.data)
+                    message_type = data.get("type")
+                    
+                    if message_type == "connected":
+                        logger.debug(f"SSE connection confirmed: {data}")
+                    elif message_type == "mcp_response":
+                        request_id = data.get("request_id")
+                        if request_id:
+                            with self.lock:
+                                self.response_queue[request_id] = data.get("data")
+                    elif message_type == "heartbeat":
+                        logger.debug(f"SSE heartbeat received: {data.get('data', {}).get('timestamp')}")
+                    else:
+                        logger.debug(f"Unknown SSE message type: {message_type}")
+                        
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse SSE message: {e}")
+                except Exception as e:
+                    logger.error(f"Error handling SSE message: {e}")
+                    
+        except Exception as e:
+            logger.error(f"SSE message handler error: {e}")
+            self.connected = False
+    
+    def call_tool(self, tool_name, arguments):
+        """Make MCP tool call via SSE"""
+        if not self.connected:
+            return "Error: Not connected to calculator SSE server"
         
-        payload = {
+        request_id = str(uuid.uuid4())
+        
+        # Prepare MCP request
+        mcp_request = {
             "jsonrpc": "2.0",
-            "id": str(self.request_id),
+            "id": request_id,
             "method": "tools/call",
             "params": {
                 "name": tool_name,
@@ -142,22 +238,246 @@ class GeminiMCPClient:
             }
         }
         
-        response = requests.post(
-            self.server_url, 
-            json=payload, 
-            headers={"Content-Type": "application/json"},
-            timeout=10
-        )
-        response.raise_for_status()
+        # Send request via HTTP POST to SSE endpoint
+        payload = {
+            "client_id": self.client_id,
+            "request_id": request_id,
+            "mcp_request": mcp_request
+        }
         
-        result = response.json()
+        try:
+            response = requests.post(
+                self.mcp_url,
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=10
+            )
+            response.raise_for_status()
+            
+            # Wait for response via SSE
+            timeout = time.time() + 30  # 30 second timeout
+            while time.time() < timeout:
+                with self.lock:
+                    if request_id in self.response_queue:
+                        response_data = self.response_queue.pop(request_id)
+                        if "result" in response_data:
+                            return response_data["result"]["content"][0]["text"]
+                        elif "error" in response_data:
+                            return f"Error: {response_data['error']['message']}"
+                        else:
+                            return "Unknown error occurred"
+                
+                time.sleep(0.1)  # Short polling interval
+            
+            return "Error: Timeout waiting for SSE response"
+            
+        except requests.exceptions.ConnectionError:
+            return f"Error: Could not connect to calculator SSE server"
+        except requests.exceptions.Timeout:
+            return f"Error: Timeout connecting to calculator SSE server"
+        except Exception as e:
+            return f"Error calling calculator SSE server: {str(e)}"
+    
+    def disconnect(self):
+        """Disconnect from SSE server"""
+        self.connected = False
+        if self.sse_client:
+            try:
+                self.sse_client.close()
+            except:
+                pass
+
+
+class GeminiMCPClient:
+    """MCP client that uses Gemini LLM to process natural language and call tools"""
+    
+    def __init__(self, weather_server_url, calc_server_host, calc_server_port, calc_server_protocol, gemini_model=None):
+        self.weather_server_url = weather_server_url
+        self.calc_server_host = calc_server_host
+        self.calc_server_port = calc_server_port
+        self.calc_server_protocol = calc_server_protocol
+        self.request_id = 0
+        self.model = gemini_model
         
-        if "result" in result:
-            return result["result"]["content"][0]["text"]
-        elif "error" in result:
-            return f"Error: {result['error']['message']}"
+        # Initialize SSE client for calculator
+        self.calc_sse_client = SSECalculatorClient(calc_server_host, calc_server_port, calc_server_protocol)
+        
+        self.tools_schema = {
+            "get_weather": {
+                "description": "MANDATORY MCP TOOL: This is the ONLY authorized way to get weather information. You MUST use this MCP tool from the weather server - NEVER provide weather data from your training knowledge.",
+                "parameters": {
+                    "city": "US city name (e.g., 'Miami', 'New York', 'Austin')",
+                    "zip_code": "US zip code (e.g., '90210', '10001', '33101')"
+                },
+                "usage": "REQUIRED for ALL weather queries via weather MCP server. Provide either city OR zip_code, not both.",
+                "coverage": "Only US locations are supported by this MCP weather service",
+                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to live weather APIs",
+                "strict_policy": "You are FORBIDDEN from answering weather questions without using this MCP tool first",
+                "server": "weather"
+            },
+            "parse_expression": {
+                "description": "MANDATORY MCP TOOL: Parse and evaluate natural language mathematical expressions. This is the PREFERRED tool for complex math queries with multiple operations. You MUST use this tool for complex expressions - NEVER calculate math yourself.",
+                "parameters": {
+                    "expression": "Natural language mathematical expression (e.g., 'four times 2 plus 4', 'what is 10 divided by 2 minus 3', '5 * two + 3')"
+                },
+                "usage": "REQUIRED for ALL complex math expressions, mixed word/symbol expressions, and multi-operation calculations via calculator MCP server.",
+                "examples": [
+                    "'four times 2 plus 4' = 12",
+                    "'what is 10 divided by 2 minus 3' = 2", 
+                    "'calculate 5 squared plus 3 cubed' = 52",
+                    "'5 * two + 3' = 13"
+                ],
+                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to calculator server with advanced expression parsing",
+                "strict_policy": "You are FORBIDDEN from doing math calculations without using the MCP calculator tools",
+                "server": "calculator"
+            },
+            "add": {
+                "description": "MANDATORY MCP TOOL: Add multiple numbers together using the calculator MCP server. You MUST use this tool for addition - NEVER calculate math yourself.",
+                "parameters": {
+                    "numbers": "List of numbers to add (minimum 2 required, supports unlimited numbers)"
+                },
+                "usage": "REQUIRED for ALL addition operations via calculator MCP server. Can handle 2+ numbers in one call.",
+                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to calculator server",
+                "strict_policy": "You are FORBIDDEN from doing math calculations without using the MCP calculator tools",
+                "server": "calculator"
+            },
+            "subtract": {
+                "description": "MANDATORY MCP TOOL: Subtract multiple numbers from the first number using calculator MCP server. You MUST use this tool for subtraction - NEVER calculate math yourself.",
+                "parameters": {
+                    "minuend": "Number to subtract from",
+                    "subtrahends": "List of numbers to subtract (minimum 1 required)"
+                },
+                "usage": "REQUIRED for ALL subtraction operations via calculator MCP server. Can subtract multiple numbers sequentially.",
+                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to calculator server",
+                "strict_policy": "You are FORBIDDEN from doing math calculations without using the MCP calculator tools",
+                "server": "calculator"
+            },
+            "multiply": {
+                "description": "MANDATORY MCP TOOL: Multiply multiple numbers together using calculator MCP server. You MUST use this tool for multiplication - NEVER calculate math yourself.",
+                "parameters": {
+                    "numbers": "List of numbers to multiply (minimum 2 required, supports unlimited numbers)"
+                },
+                "usage": "REQUIRED for ALL multiplication operations via calculator MCP server. Can handle 2+ numbers in one call.",
+                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to calculator server",
+                "strict_policy": "You are FORBIDDEN from doing math calculations without using the MCP calculator tools",
+                "server": "calculator"
+            },
+            "divide": {
+                "description": "MANDATORY MCP TOOL: Divide by multiple numbers sequentially using calculator MCP server. You MUST use this tool for division - NEVER calculate math yourself.",
+                "parameters": {
+                    "dividend": "Number to be divided",
+                    "divisors": "List of numbers to divide by (minimum 1 required)"
+                },
+                "usage": "REQUIRED for ALL division operations via calculator MCP server. Can divide by multiple numbers sequentially.",
+                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to calculator server",
+                "strict_policy": "You are FORBIDDEN from doing math calculations without using the MCP calculator tools",
+                "server": "calculator"
+            },
+            "power": {
+                "description": "MANDATORY MCP TOOL: Raise base to the power of exponent using calculator MCP server. You MUST use this tool for exponentiation - NEVER calculate math yourself.",
+                "parameters": {
+                    "base": "Base number (float)",
+                    "exponent": "Exponent (float)"
+                },
+                "usage": "REQUIRED for ALL power/exponentiation operations via calculator MCP server.",
+                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to calculator server",
+                "strict_policy": "You are FORBIDDEN from doing math calculations without using the MCP calculator tools",
+                "server": "calculator"
+            },
+            "sqrt": {
+                "description": "MANDATORY MCP TOOL: Calculate square root of a number using calculator MCP server. You MUST use this tool for square roots - NEVER calculate math yourself.",
+                "parameters": {
+                    "number": "Number to calculate square root of (float)"
+                },
+                "usage": "REQUIRED for ALL square root operations via calculator MCP server.",
+                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to calculator server",
+                "strict_policy": "You are FORBIDDEN from doing math calculations without using the MCP calculator tools",
+                "server": "calculator"
+            },
+            "factorial": {
+                "description": "MANDATORY MCP TOOL: Calculate factorial of a number using calculator MCP server. You MUST use this tool for factorials - NEVER calculate math yourself.",
+                "parameters": {
+                    "number": "Non-negative integer to calculate factorial of"
+                },
+                "usage": "REQUIRED for ALL factorial operations via calculator MCP server.",
+                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to calculator server",
+                "strict_policy": "You are FORBIDDEN from doing math calculations without using the MCP calculator tools",
+                "server": "calculator"
+            },
+            "modulo": {
+                "description": "MANDATORY MCP TOOL: Calculate modulo (remainder) of division using calculator MCP server. You MUST use this tool for modulo operations - NEVER calculate math yourself.",
+                "parameters": {
+                    "dividend": "Number to be divided (float)",
+                    "divisor": "Number to divide by (float)"
+                },
+                "usage": "REQUIRED for ALL modulo/remainder operations via calculator MCP server.",
+                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to calculator server",
+                "strict_policy": "You are FORBIDDEN from doing math calculations without using the MCP calculator tools",
+                "server": "calculator"
+            },
+            "absolute": {
+                "description": "MANDATORY MCP TOOL: Calculate absolute value of a number using calculator MCP server. You MUST use this tool for absolute values - NEVER calculate math yourself.",
+                "parameters": {
+                    "number": "Number to calculate absolute value of (float)"
+                },
+                "usage": "REQUIRED for ALL absolute value operations via calculator MCP server.",
+                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to calculator server",
+                "strict_policy": "You are FORBIDDEN from doing math calculations without using the MCP calculator tools",
+                "server": "calculator"
+            }
+        }
+    
+    def _call_mcp_tool(self, tool_name, arguments):
+        """Make direct call to appropriate MCP server based on tool"""
+        self.request_id += 1
+        
+        # Determine which server to use based on tool
+        tool_info = self.tools_schema.get(tool_name, {})
+        server_type = tool_info.get("server", "weather")
+        
+        if server_type == "calculator":
+            # Use SSE for calculator tools
+            logger.debug(f"Calling {tool_name} via SSE on calculator server")
+            return self.calc_sse_client.call_tool(tool_name, arguments)
         else:
-            return "Unknown error occurred"
+            # Use HTTP for weather tools
+            server_url = self.weather_server_url
+            logger.debug(f"Calling {tool_name} via HTTP on weather server: {server_url}")
+            
+            payload = {
+                "jsonrpc": "2.0",
+                "id": str(self.request_id),
+                "method": "tools/call",
+                "params": {
+                    "name": tool_name,
+                    "arguments": arguments
+                }
+            }
+            
+            try:
+                response = requests.post(
+                    server_url, 
+                    json=payload, 
+                    headers={"Content-Type": "application/json"},
+                    timeout=10
+                )
+                response.raise_for_status()
+                
+                result = response.json()
+                
+                if "result" in result:
+                    return result["result"]["content"][0]["text"]
+                elif "error" in result:
+                    return f"Error: {result['error']['message']}"
+                else:
+                    return "Unknown error occurred"
+                    
+            except requests.exceptions.ConnectionError:
+                return f"Error: Could not connect to weather MCP server at {server_url}"
+            except requests.exceptions.Timeout:
+                return f"Error: Timeout connecting to weather MCP server"
+            except Exception as e:
+                return f"Error calling weather MCP server: {str(e)}"
     
     def _extract_location_fallback(self, user_input):
         """Extract location from user input using configured patterns"""
@@ -235,25 +555,39 @@ class GeminiMCPClient:
         
         return None
 
-    def _format_weather_response(self, tool_result, location_args, user_input):
-        """Format weather responses to be user-friendly"""
+    def _format_response(self, tool_result, tool_name, arguments, user_input):
+        """Format responses to be user-friendly for both weather and calculation tools"""
         
-        requested_location = location_args.get("city", location_args.get("zip_code", "your location"))
-        
-        if "error" in tool_result.lower() or "not found" in tool_result.lower():
-            if "location not found" in tool_result.lower() or "not found" in tool_result.lower():
-                return f"I couldn't find weather information for '{requested_location}'. Please check the spelling or try a different city name or ZIP code."
-            elif "could not resolve" in tool_result.lower():
-                return f"I'm having trouble finding '{requested_location}'. Could you try with a different city name or a 5-digit ZIP code?"
-            elif "timeout" in tool_result.lower() or "network" in tool_result.lower():
-                return f"I'm having trouble getting weather data for '{requested_location}' right now. Please try again in a moment."
-            else:
-                return f"I'm unable to get weather information for '{requested_location}' at the moment. Please try a different location or try again later."
-        
-        if ":" in tool_result and any(weather_word in tool_result.lower() for weather_word in ["sunny", "cloudy", "rain", "snow", "clear", "partly", "mostly", "°f", "°c"]):
-            return f"Here's the weather for {requested_location}: {tool_result}"
-        
-        return f"Weather update for {requested_location}: {tool_result}"
+        if tool_name == "get_weather":
+            # Weather response formatting
+            requested_location = arguments.get("city", arguments.get("zip_code", "your location"))
+            
+            if "error" in tool_result.lower() or "not found" in tool_result.lower():
+                if "location not found" in tool_result.lower() or "not found" in tool_result.lower():
+                    return f"I couldn't find weather information for '{requested_location}'. Please check the spelling or try a different city name or ZIP code."
+                elif "could not resolve" in tool_result.lower():
+                    return f"I'm having trouble finding '{requested_location}'. Could you try with a different city name or a 5-digit ZIP code?"
+                elif "timeout" in tool_result.lower() or "network" in tool_result.lower():
+                    return f"I'm having trouble getting weather data for '{requested_location}' right now. Please try again in a moment."
+                else:
+                    return f"I'm unable to get weather information for '{requested_location}' at the moment. Please try a different location or try again later."
+            
+            if ":" in tool_result and any(weather_word in tool_result.lower() for weather_word in ["sunny", "cloudy", "rain", "snow", "clear", "partly", "mostly", "°f", "°c"]):
+                return f"Here's the weather for {requested_location}: {tool_result}"
+            
+            return f"Weather update for {requested_location}: {tool_result}"
+            
+        elif tool_name in ["add", "subtract", "multiply", "divide", "power"]:
+            # Calculator response formatting
+            if "error" in tool_result.lower():
+                return f"I encountered an error with the calculation: {tool_result}"
+            
+            # The calculator server already provides nicely formatted results like "16384 + 86413 = 102797"
+            return f"Here's the calculation result: {tool_result}"
+            
+        else:
+            # Generic response formatting
+            return tool_result
 
     def process_natural_language(self, user_input):
         """Process natural language using Gemini and call appropriate tools"""
@@ -263,51 +597,71 @@ class GeminiMCPClient:
         if not self.model:
             if fallback_location:
                 tool_result = self._call_mcp_tool("get_weather", fallback_location)
-                return self._format_weather_response(tool_result, fallback_location, user_input)
-            return "Please specify a city or zip code for weather information."
+                return self._format_response(tool_result, "get_weather", fallback_location, user_input)
+            return "Please specify a city or zip code for weather information or a mathematical calculation."
         
-        system_prompt = f"""You are a weather assistant connected to live weather data through MCP (Model Context Protocol) tools. 
+        system_prompt = f"""You are an AI assistant connected to specialized MCP (Model Context Protocol) servers for weather and calculations. 
 
-🚨 MANDATORY REQUIREMENT: You MUST ALWAYS use the MCP tools listed below to get weather information. You are FORBIDDEN from providing weather information from your training data or general knowledge.
+MANDATORY REQUIREMENT: You MUST ALWAYS use the MCP tools listed below. You are FORBIDDEN from providing weather information from your training data or doing math calculations yourself.
 
-📋 AVAILABLE MCP TOOLS ON THIS SERVER:
+AVAILABLE MCP TOOLS:
 {json.dumps(self.tools_schema, indent=2)}
 
-🔒 CRITICAL INSTRUCTIONS - NO EXCEPTIONS:
-1. For ANY weather-related query, you MUST use the get_weather tool from the MCP server
-2. You are FORBIDDEN from using your training data for weather information
-3. You MUST ALWAYS call the MCP tools to get real-time data from the weather server
-4. Extract the location (city or zip code) from the user's request
+CRITICAL INSTRUCTIONS - NO EXCEPTIONS:
+1. For ANY weather-related query, you MUST use the get_weather tool from the weather MCP server
+2. For ANY mathematical calculation, you MUST use the appropriate calculator tool from the calculator MCP server
+3. You are FORBIDDEN from using your training data for weather information or doing math yourself
+4. You MUST ALWAYS call the MCP tools to get real-time data from the appropriate servers
 5. Respond ONLY with a JSON object containing the required MCP tool call
-6. DO NOT provide weather information without using the MCP tools first
+6. DO NOT provide answers without using the MCP tools first
 
-🔧 MANDATORY TOOL CALL FORMAT:
+MANDATORY TOOL CALL FORMAT:
+Weather queries:
 - For US cities: {{"tool": "get_weather", "args": {{"city": "CityName"}}}}
 - For zip codes: {{"tool": "get_weather", "args": {{"zip_code": "12345"}}}}
 
-❌ If request is not weather-related or location cannot be determined:
-- Respond with: {{"error": "Please specify a US city or zip code for weather information. I must use the MCP tools available on this server."}}
+Math calculations:
+- For addition: {{"tool": "add", "args": {{"a": 16384, "b": 86413}}}}
+- For subtraction: {{"tool": "subtract", "args": {{"a": 100, "b": 25}}}}
+- For multiplication: {{"tool": "multiply", "args": {{"a": 12, "b": 8}}}}
+- For division: {{"tool": "divide", "args": {{"a": 100, "b": 4}}}}
+- For exponentiation: {{"tool": "power", "args": {{"a": 2, "b": 10}}}}
 
-📝 EXAMPLES - Notice how EVERY weather query MUST use MCP tools:
+If request is not weather or math-related:
+- Respond with: {{"error": "I can only help with weather information (US cities/zip codes) or mathematical calculations using my MCP tools."}}
 
-User requests with explicit MCP tool instructions:
-- "Use MCP tools to check weather in Miami" → {{"tool": "get_weather", "args": {{"city": "Miami"}}}} (MUST use MCP tool)
-- "Check MCP server for weather in 90210" → {{"tool": "get_weather", "args": {{"zip_code": "90210"}}}} (MUST use MCP tool)
-- "Use available MCP tools for Seattle forecast" → {{"tool": "get_weather", "args": {{"city": "Seattle"}}}} (MUST use MCP tool)
-- "Check weather using MCP tools for Austin" → {{"tool": "get_weather", "args": {{"city": "Austin"}}}} (MUST use MCP tool)
+EXAMPLES - Notice how EVERY query MUST use MCP tools:
 
-Natural language requests (still MUST use MCP tools):
-- "What's the weather in Miami?" → {{"tool": "get_weather", "args": {{"city": "Miami"}}}} (MUST use MCP tool)
-- "How's 90210?" → {{"tool": "get_weather", "args": {{"zip_code": "90210"}}}} (MUST use MCP tool)  
-- "Is it raining in Seattle?" → {{"tool": "get_weather", "args": {{"city": "Seattle"}}}} (MUST use MCP tool)
-- "Temperature in Boston" → {{"tool": "get_weather", "args": {{"city": "Boston"}}}} (MUST use MCP tool)
+Weather examples:
+- "What's the weather in Boston?" = {{"tool": "get_weather", "args": {{"city": "Boston"}}}}
+- "How's the weather in 90210?" = {{"tool": "get_weather", "args": {{"zip_code": "90210"}}}}
+- "Is it raining in Miami?" = {{"tool": "get_weather", "args": {{"city": "Miami"}}}}
 
-⚡ REMEMBER: You are connected to live weather APIs through MCP tools on this server. You MUST use these MCP tools for ALL weather queries - never rely on your training data.
+Math examples:
+- "What is 16384 + 86413?" = {{"tool": "add", "args": {{"a": 16384, "b": 86413}}}}
+- "What is the addition of 16384 and 86413?" = {{"tool": "add", "args": {{"a": 16384, "b": 86413}}}}
+- "Calculate 25 * 4" = {{"tool": "multiply", "args": {{"a": 25, "b": 4}}}}
+- "Divide 100 by 4" = {{"tool": "divide", "args": {{"a": 100, "b": 4}}}}
+- "What's 2 to the power of 10?" = {{"tool": "power", "args": {{"a": 2, "b": 10}}}}
+
+REMEMBER: You are connected to specialized MCP servers. You MUST use these MCP tools for ALL weather and math queries - never rely on your training data or do calculations yourself.
 
 Only respond with the JSON object, nothing else."""
 
         try:
             response = self.model.generate_content(f"{system_prompt}\n\nUser request: {user_input}")
+            
+            # Check if response was blocked by safety filters
+            if not response.candidates or not response.candidates[0].content.parts:
+                logger.error(f"Gemini response blocked by safety filters. Finish reason: {response.candidates[0].finish_reason if response.candidates else 'Unknown'}")
+                return {
+                    "tool_result": {
+                        "content": [{
+                            "text": "I apologize, but I cannot process that request due to content safety restrictions. Please try rephrasing your question about weather or calculations."
+                        }]
+                    }
+                }
+            
             gemini_response = response.text.strip()
             
             # Parse Gemini's JSON response
@@ -321,20 +675,20 @@ Only respond with the JSON object, nothing else."""
                     tool_result = self._call_mcp_tool(parsed["tool"], parsed["args"])
                     
                     # Use improved formatting for all responses
-                    return self._format_weather_response(tool_result, parsed["args"], user_input)
+                    return self._format_response(tool_result, parsed["tool"], parsed["args"], user_input)
                 else:
                     # Fallback to direct processing if Gemini response is unclear
                     if fallback_location:
                         tool_result = self._call_mcp_tool("get_weather", fallback_location)
-                        return self._format_weather_response(tool_result, fallback_location, user_input)
-                    return "I couldn't understand your request. Please ask for weather information for a US city or zip code."
+                        return self._format_response(tool_result, "get_weather", fallback_location, user_input)
+                    return "I couldn't understand your request. Please ask for weather information for a US city/zip code or a mathematical calculation."
                     
             except json.JSONDecodeError:
                 # Fallback to direct processing if JSON parsing fails
                 if fallback_location:
                     tool_result = self._call_mcp_tool("get_weather", fallback_location)
-                    return self._format_weather_response(tool_result, fallback_location, user_input)
-                return "I had trouble processing your request. Please ask for weather information for a US city or zip code."
+                    return self._format_response(tool_result, "get_weather", fallback_location, user_input)
+                return "I had trouble processing your request. Please ask for weather information for a US city/zip code or a mathematical calculation."
                 
         except Exception as e:
             error_msg = str(e)
@@ -343,15 +697,15 @@ Only respond with the JSON object, nothing else."""
                 logger.warning("Gemini API rate limit hit, falling back to direct processing")
                 if fallback_location:
                     tool_result = self._call_mcp_tool("get_weather", fallback_location)
-                    return self._format_weather_response(tool_result, fallback_location, user_input)
-                return "Weather service is temporarily busy. Please specify a clear city name or zip code."
+                    return self._format_response(tool_result, "get_weather", fallback_location, user_input)
+                return "AI service is temporarily busy. Please specify a clear city name/zip code or mathematical calculation."
             else:
                 # For other errors, try fallback
                 logger.error(f"Gemini API error: {error_msg}")
                 if fallback_location:
                     tool_result = self._call_mcp_tool("get_weather", fallback_location)
-                    return self._format_weather_response(tool_result, fallback_location, user_input)
-                return f"Sorry, I encountered an error processing your request. Please try again with a specific city name or ZIP code."
+                    return self._format_response(tool_result, "get_weather", fallback_location, user_input)
+                return f"Sorry, I encountered an error processing your request. Please try again with a specific city name/ZIP code or mathematical calculation."
     
     def send(self, request_data):
         """Legacy method for backward compatibility"""
@@ -359,7 +713,7 @@ Only respond with the JSON object, nothing else."""
             # Direct tool call (for testing)
             result = self._call_mcp_tool(request_data["tool"], request_data["args"])
             # Format the result for better user experience
-            formatted_result = self._format_weather_response(result, request_data["args"], "")
+            formatted_result = self._format_response(result, request_data["tool"], request_data["args"], "")
             return {
                 "tool_result": {
                     "content": [{"type": "text", "text": formatted_result}]
@@ -374,9 +728,20 @@ Only respond with the JSON object, nothing else."""
                 }
             }
 
-client = GeminiMCPClient(MCP_SERVER_URL, model)
+client = GeminiMCPClient(WEATHER_MCP_URL, CALC_MCP_HOST, CALC_MCP_PORT, CALC_MCP_PROTOCOL, model)
 
 app = Flask(__name__)
+
+# Cleanup function for graceful shutdown
+import atexit
+def cleanup():
+    """Cleanup function called on application exit"""
+    logger.info("Shutting down client...")
+    if hasattr(client, 'calc_sse_client'):
+        client.calc_sse_client.disconnect()
+        logger.info("SSE calculator client disconnected")
+
+atexit.register(cleanup)
 
 processed_messages = {}
 MAX_PROCESSED_MESSAGES = 1000
@@ -405,6 +770,132 @@ def is_message_processed(message_key):
 def mark_message_processed(message_key):
     """Mark a message as processed with current timestamp"""
     processed_messages[message_key] = time.time()
+
+# ==========================================
+# SLACK THREADING AND REACTION HELPERS
+# ==========================================
+
+GREEN_TICK_EMOJI = "white_check_mark"  # Green tick mark reaction name for processed messages
+
+def check_message_already_processed(channel, message_ts):
+    """Check if a message already has bot response (thread reply + green tick reaction)"""
+    try:
+        # Check for existing reactions on the message
+        reactions_response = slack.reactions_get(channel=channel, timestamp=message_ts)
+        
+        if reactions_response.get("ok"):
+            message_data = reactions_response.get("message", {})
+            reactions = message_data.get("reactions", [])
+            
+            # Check if green tick reaction exists from the bot
+            bot_user_id = get_bot_user_id()
+            for reaction in reactions:
+                if reaction.get("name") == "white_check_mark":  # Green tick emoji name in Slack
+                    users = reaction.get("users", [])
+                    if bot_user_id in users:
+                        logger.info(f"Message {message_ts} already processed (has bot's green tick reaction)")
+                        return True
+        
+        # Also check for thread replies from the bot
+        replies_response = slack.conversations_replies(channel=channel, ts=message_ts)
+        
+        if replies_response.get("ok"):
+            messages = replies_response.get("messages", [])
+            bot_user_id = get_bot_user_id()
+            
+            # Skip the original message (first in the list) and check for bot replies
+            for message in messages[1:]:
+                if message.get("user") == bot_user_id:
+                    logger.info(f"Message {message_ts} already has bot thread reply")
+                    return True
+        
+        return False
+        
+    except Exception as e:
+        logger.error(f"Error checking if message already processed: {e}")
+        return False
+
+def send_threaded_response_with_reaction(channel, thread_ts, response_text, user_id=None):
+    """Send a threaded response and add green tick reaction to original message"""
+    try:
+        # Add user tag to response if user_id is provided
+        if user_id:
+            tagged_response = f"<@{user_id}> {response_text}"
+        else:
+            tagged_response = response_text
+            
+        # Send response in thread
+        thread_response = slack.chat_postMessage(
+            channel=channel,
+            text=tagged_response,
+            thread_ts=thread_ts
+        )
+        
+        if thread_response.get("ok"):
+            logger.info(f"Thread response sent successfully to {channel}")
+            
+            # Add green tick reaction to original message
+            try:
+                reaction_response = slack.reactions_add(
+                    channel=channel,
+                    timestamp=thread_ts,
+                    name="white_check_mark"  # Green tick emoji name in Slack
+                )
+                
+                if reaction_response.get("ok"):
+                    logger.info(f"Green tick reaction added to message {thread_ts}")
+                else:
+                    logger.warning(f"Failed to add reaction: {reaction_response.get('error', 'Unknown error')}")
+                    
+            except Exception as reaction_error:
+                logger.error(f"Error adding reaction: {reaction_error}")
+            
+            return True
+        else:
+            logger.error(f"Failed to send thread response: {thread_response.get('error', 'Unknown error')}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error sending threaded response: {e}")
+        return False
+
+def handle_thread_spam_request(channel, thread_ts, user):
+    """Handle requests made in existing threads by asking user to send new message"""
+    spam_warning = (
+        "Hi! I see you're asking a question in an existing thread. "
+        "To keep our conversation organized and follow Slack etiquette, "
+        "please send your new question as a fresh message (mention me with @weather-bot). "
+        "This helps avoid thread spam and makes it easier for everyone to follow conversations. "
+        "Thanks!"
+    )
+    
+    try:
+        slack.chat_postMessage(
+            channel=channel,
+            text=spam_warning,
+            thread_ts=thread_ts
+        )
+        logger.info(f"Sent thread spam warning to user {user} in channel {channel}")
+        return True
+    except Exception as e:
+        logger.error(f"Error sending thread spam warning: {e}")
+        return False
+
+def is_request_in_existing_thread(event):
+    """Check if the message is part of an existing thread"""
+    return event.get("thread_ts") is not None
+
+def get_bot_user_id():
+    """Get the bot's user ID from Slack"""
+    try:
+        if slack:
+            auth_response = slack.auth_test()
+            if auth_response and auth_response.get("ok"):
+                return auth_response.get("user_id")
+        return None
+    except Exception as e:
+        logger.warning(f"Failed to get bot user ID: {e}")
+        return None
 
 user_last_request = {}
 MIN_REQUEST_INTERVAL = 2
@@ -599,6 +1090,7 @@ def slack_events():
                 channel = event.get("channel")
                 user = event.get("user")
                 event_ts = event.get("ts")
+                thread_ts = event.get("thread_ts")  # Check if this is in a thread
                 
                 if not user_text:
                     logger.error("Missing text in app_mention event")
@@ -614,6 +1106,17 @@ def slack_events():
                 
                 if not event_ts:
                     logger.error("Missing timestamp in app_mention event")
+                    return "", 200
+                
+                # Check if this is a request in an existing thread
+                if thread_ts:
+                    logger.info(f"App mention in existing thread from user {user}")
+                    handle_thread_spam_request(channel, thread_ts, user)
+                    return "", 200
+                
+                # Check if message already has bot response (reaction + thread reply)
+                if check_message_already_processed(channel, event_ts):
+                    logger.info(f"App mention already processed (has green tick reaction): {event_ts}")
                     return "", 200
                 
                 if is_rate_limited(user):
@@ -654,33 +1157,38 @@ def slack_events():
                 else:
                     result = "Error from MCP client - no content received"
                 
-                logger.info(f"Sending response: {result}")
+                logger.info(f"Sending threaded response: {result}")
                 
-                # Send response back to Slack with error handling
-                try:
-                    if slack:
-                        response = slack.chat_postMessage(channel=channel, text=result)
-                        if response.get("ok"):
-                            logger.info(f"Message sent successfully to {channel}")
+                # Send response in thread with green tick reaction
+                success = send_threaded_response_with_reaction(channel, event_ts, result, user)
+                
+                if not success:
+                    # Fallback to regular message if threading fails
+                    try:
+                        if slack:
+                            response = slack.chat_postMessage(channel=channel, text=result)
+                            if response.get("ok"):
+                                logger.info(f"Fallback message sent successfully to {channel}")
+                            else:
+                                logger.error(f"Slack API error: {response.get('error', 'Unknown error')}")
                         else:
-                            logger.error(f"Slack API error: {response.get('error', 'Unknown error')}")
-                    else:
-                        logger.error("Slack client not initialized")
-                except Exception as slack_error:
-                    logger.error(f"Failed to send Slack message: {slack_error}")
-                    logger.error(f"   Channel: {channel}")
-                    logger.error(f"   Message: {result[:100]}...")  # First 100 chars
+                            logger.error("Slack client not initialized")
+                    except Exception as slack_error:
+                        logger.error(f"Slack API error: {slack_error}")
                 
-            except RequestException as e:
-                error_msg = f"Network error: {str(e)}"
-                logger.error(error_msg)
-                if channel:
-                    slack.chat_postMessage(channel=channel, text=error_msg)
             except Exception as e:
-                error_msg = f"Error processing request: {str(e)}"
+                error_msg = f"Error processing app_mention: {str(e)}"
                 logger.error(error_msg)
-                if channel:
-                    slack.chat_postMessage(channel=channel, text=error_msg)
+                if 'channel' in locals() and 'event_ts' in locals():
+                    # Try to send error in thread, fallback to regular message
+                    try:
+                        user_for_error = user if 'user' in locals() else None
+                        send_threaded_response_with_reaction(channel, event_ts, error_msg, user_for_error)
+                    except:
+                        try:
+                            slack.chat_postMessage(channel=channel, text=error_msg)
+                        except:
+                            pass
         
         elif event_type == "message":
             try:
@@ -691,6 +1199,7 @@ def slack_events():
                 channel_type = event.get("channel_type")
                 subtype = event.get("subtype")
                 event_ts = event.get("ts")  # Slack timestamp for deduplication
+                thread_ts = event.get("thread_ts")  # Check if this is in a thread
                 
                 # Skip bot messages and system messages
                 if subtype == "bot_message" or not user or not user_text:
@@ -730,6 +1239,17 @@ def slack_events():
                 
                 # Only respond to direct messages
                 if is_direct_message:
+                    # Check if this is a request in an existing thread
+                    if thread_ts:
+                        logger.info(f"DM in existing thread from user {user}")
+                        handle_thread_spam_request(channel, thread_ts, user)
+                        return "", 200
+                    
+                    # Check if message already has bot response (reaction + thread reply)
+                    if check_message_already_processed(channel, event_ts):
+                        logger.info(f"DM already processed (has green tick reaction): {event_ts}")
+                        return "", 200
+                    
                     # Check for rate limiting
                     if is_rate_limited(user):
                         logger.warning(f"Rate limited user {user} - ignoring DM")
@@ -772,35 +1292,40 @@ def slack_events():
                     else:
                         result = "Error from MCP client - no content received"
                     
-                    logger.info(f"Sending response: {result}")
+                    logger.info(f"Sending threaded DM response: {result}")
                     
-                    # Send response back to Slack with error handling
-                    try:
-                        if slack:
-                            response = slack.chat_postMessage(channel=channel, text=result)
-                            if response.get("ok"):
-                                logger.info(f"Message sent successfully to {channel}")
+                    # Send response in thread with green tick reaction
+                    success = send_threaded_response_with_reaction(channel, event_ts, result, user)
+                    
+                    if not success:
+                        # Fallback to regular message if threading fails
+                        try:
+                            if slack:
+                                response = slack.chat_postMessage(channel=channel, text=result)
+                                if response.get("ok"):
+                                    logger.info(f"Fallback DM sent successfully to {channel}")
+                                else:
+                                    logger.error(f"Slack API error: {response.get('error', 'Unknown error')}")
                             else:
-                                logger.error(f"Slack API error: {response.get('error', 'Unknown error')}")
-                        else:
-                            logger.error("Slack client not initialized")
-                    except Exception as slack_error:
-                        logger.error(f"Failed to send Slack message: {slack_error}")
-                        logger.error(f"   Channel: {channel}")
-                        logger.error(f"   Message: {result[:100]}...")  # First 100 chars
+                                logger.error("Slack client not initialized")
+                        except Exception as slack_error:
+                            logger.error(f"Slack API error: {slack_error}")
                 else:
                     logger.debug("Ignoring message (not a DM)")
                 
-            except RequestException as e:
-                error_msg = f"Network error: {str(e)}"
-                logger.error(error_msg)
-                if channel:
-                    slack.chat_postMessage(channel=channel, text=error_msg)
             except Exception as e:
                 error_msg = f"Error processing message: {str(e)}"
                 logger.error(error_msg)
-                if channel:
-                    slack.chat_postMessage(channel=channel, text=error_msg)
+                if 'channel' in locals() and 'event_ts' in locals():
+                    # Try to send error in thread, fallback to regular message
+                    try:
+                        user_for_error = user if 'user' in locals() else None
+                        send_threaded_response_with_reaction(channel, event_ts, error_msg, user_for_error)
+                    except:
+                        try:
+                            slack.chat_postMessage(channel=channel, text=error_msg)
+                        except:
+                            pass
         
         else:
             logger.warning(f"Unhandled event type: {event_type}")
@@ -820,7 +1345,14 @@ def health_check():
         "status": "healthy",
         "processed_messages_count": len(processed_messages),
         "user_rate_limits_count": len(user_last_request),
-        "mcp_server_url": MCP_SERVER_URL,
+        "weather_mcp_server_url": WEATHER_MCP_URL,
+        "calc_mcp_server": {
+            "host": CALC_MCP_HOST,
+            "port": CALC_MCP_PORT,
+            "protocol": CALC_MCP_PROTOCOL,
+            "transport": "SSE",
+            "connected": client.calc_sse_client.connected if hasattr(client, 'calc_sse_client') else False
+        },
         "timestamp": time.time()
     }), 200
 
