@@ -1,18 +1,17 @@
-# Use Python 3.13.5 slim image based on Debian Bookworm
-FROM python:3.13.5-slim-bookworm
+# Use Python 3.13.6 Alpine 3.21 image - no CVEs and most secure
+FROM python:3.13.6-alpine3.21
 
 # Set working directory
 WORKDIR /app
 
-# Create non-root user for enhanced security
-RUN groupadd --gid 1000 appuser && \
-    useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser
+# Create non-root user for enhanced security (Alpine syntax)
+RUN addgroup -g 1000 appuser && \
+    adduser -u 1000 -G appuser -s /bin/sh -D appuser
 
-# Update system packages and clean up package cache
-RUN apt-get update && \
-    apt-get upgrade -y && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+# Update system packages for Alpine
+RUN apk update && \
+    apk upgrade && \
+    rm -rf /var/cache/apk/*
 
 # Copy requirements file first for better Docker layer caching
 COPY requirements.txt .
@@ -39,5 +38,17 @@ ENV FLASK_ENV=production
 # Cloud Run will override PORT, but set default for container
 ENV PORT=8080
 
-# Start the Flask application
-CMD ["python", "app.py"]
+# Optimized gunicorn configuration for client application
+CMD ["gunicorn", \
+    "--bind", "0.0.0.0:8080", \
+    "--workers", "2", \
+    "--threads", "8", \
+    "--timeout", "90", \
+    "--keep-alive", "10", \
+    "--max-requests", "1000", \
+    "--max-requests-jitter", "50", \
+    "--preload", \
+    "--worker-connections", "1000", \
+    "--access-logfile", "-", \
+    "--error-logfile", "-", \
+    "app:app"]
