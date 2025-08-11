@@ -1,3 +1,175 @@
+# Weather Calc Bot Client Configuration
+
+# MCP Tools Schema - Defines available tools and their usage
+mcp_tools:
+  get_weather:
+    description: "MANDATORY MCP TOOL: This is the ONLY authorized way to get weather information. You MUST use this MCP tool from the weather server - NEVER provide weather data from your training knowledge."
+    parameters:
+      city: "US city name (e.g., 'Miami', 'New York', 'Austin')"
+      zip_code: "US zip code (e.g., '90210', '10001', '33101')"
+    usage: "REQUIRED for ALL weather queries via weather MCP server. Provide either city OR zip_code, not both."
+    coverage: "Only US locations are supported by this MCP weather service"
+    mcp_requirement: "This tool connects through MCP (Model Context Protocol) to live weather APIs"
+    strict_policy: "You are FORBIDDEN from answering weather questions without using this MCP tool first"
+    server: "weather"
+    
+  parse_expression:
+    description: "PREFERRED MCP TOOL: Parse and evaluate complex mathematical expressions from natural language. Handles multi-number operations, mixed symbols/words, and complex expressions like 'four times 2 plus 4' or '10 * 3 + 5 - 2'. This is the BEST tool for complex math queries."
+    parameters:
+      expression: "Natural language mathematical expression (e.g., 'four times 2 plus 4', '10 * 3 + 5 - 2', 'square root of 25')"
+    usage: "PREFERRED for complex mathematical expressions, multi-number operations, or mixed word/symbol math queries via calculator MCP server"
+    examples:
+      - "four times 2 plus 4 = 12"
+      - "10 * 3 + 5 - 2 = 33"
+      - "square root of 25 = 5.0"
+      - "2 to the power of 8 = 256"
+    server: "calculator"
+    
+  add:
+    description: "MCP TOOL: Add multiple numbers together. Can handle 2 or more numbers."
+    parameters:
+      numbers: "List of numbers to add (e.g., [16384, 86413] or [1, 2, 3, 4])"
+    usage: "For simple addition of multiple numbers via calculator MCP server"
+    examples:
+      - "16384 + 86413 = 102797"
+      - "1 + 2 + 3 + 4 = 10"
+    server: "calculator"
+    
+  subtract:
+    description: "MCP TOOL: Subtract numbers. First number minus all subsequent numbers."
+    parameters:
+      minuend: "The number to subtract from"
+      subtrahends: "List of numbers to subtract (e.g., [25] or [10, 5, 2])"
+    usage: "For subtraction operations via calculator MCP server"
+    examples:
+      - "100 - 25 = 75"
+      - "100 - 10 - 5 - 2 = 83"
+    server: "calculator"
+    
+  multiply:
+    description: "MCP TOOL: Multiply multiple numbers together. Can handle 2 or more numbers."
+    parameters:
+      numbers: "List of numbers to multiply (e.g., [12, 8] or [2, 3, 4])"
+    usage: "For multiplication of multiple numbers via calculator MCP server"
+    examples:
+      - "12 * 8 = 96"
+      - "2 * 3 * 4 = 24"
+    server: "calculator"
+    
+  divide:
+    description: "MCP TOOL: Divide numbers. First number divided by all subsequent numbers."
+    parameters:
+      dividend: "The number to be divided"
+      divisors: "List of numbers to divide by (e.g., [4] or [2, 2])"
+    usage: "For division operations via calculator MCP server"
+    examples:
+      - "100 / 4 = 25"
+      - "100 / 2 / 2 = 25"
+    server: "calculator"
+    
+  power:
+    description: "MCP TOOL: Calculate exponentiation (base raised to the power of exponent)."
+    parameters:
+      base: "The base number"
+      exponent: "The exponent"
+    usage: "For exponentiation operations via calculator MCP server"
+    examples:
+      - "2^10 = 1024"
+      - "5^3 = 125"
+    server: "calculator"
+    
+  sqrt:
+    description: "MCP TOOL: Calculate square root of a number."
+    parameters:
+      number: "The number to find square root of"
+    usage: "For square root calculations via calculator MCP server"
+    examples:
+      - "√25 = 5.0"
+      - "√16 = 4.0"
+    server: "calculator"
+    
+  factorial:
+    description: "MCP TOOL: Calculate factorial of a number (n!)."
+    parameters:
+      number: "The number to calculate factorial of (must be non-negative integer)"
+    usage: "For factorial calculations via calculator MCP server"
+    examples:
+      - "5! = 120"
+      - "4! = 24"
+    server: "calculator"
+    
+  modulo:
+    description: "MCP TOOL: Calculate modulo (remainder of division)."
+    parameters:
+      dividend: "The number to be divided"
+      divisor: "The number to divide by"
+    usage: "For modulo operations via calculator MCP server"
+    examples:
+      - "17 % 5 = 2"
+      - "20 % 6 = 2"
+    server: "calculator"
+    
+  absolute:
+    description: "MCP TOOL: Calculate absolute value of a number."
+    parameters:
+      number: "The number to find absolute value of"
+    usage: "For absolute value calculations via calculator MCP server"
+    examples:
+      - "|−5| = 5"
+      - "|3| = 3"
+    server: "calculator"
+
+# Gemini AI Instructions and Prompts
+gemini_instructions:
+  system_prompt_template: |
+    You are an AI assistant connected to specialized MCP (Model Context Protocol) servers for weather and calculations. 
+    
+    MANDATORY REQUIREMENT: You MUST ALWAYS use the MCP tools listed below. You are FORBIDDEN from providing weather information from your training data or doing math calculations yourself.
+    
+  critical_instructions:
+    - "For ANY weather-related query, you MUST use the get_weather tool from the weather MCP server"
+    - "For ANY mathematical calculation, you MUST use the appropriate calculator tool from the calculator MCP server"
+    - "You are FORBIDDEN from using your training data for weather information or doing math yourself"
+    - "You MUST ALWAYS call the MCP tools to get real-time data from the appropriate servers"
+    - "Respond ONLY with a JSON object containing the required MCP tool call"
+    - "DO NOT provide answers without using the MCP tools first"
+    
+  tool_call_formats:
+    weather_queries:
+      city_format: '{"tool": "get_weather", "args": {"city": "CityName"}}'
+      zip_format: '{"tool": "get_weather", "args": {"zip_code": "12345"}}'
+      
+    math_calculations:
+      complex_expression: '{"tool": "parse_expression", "args": {"expression": "four times 2 plus 4"}}'
+      addition: '{"tool": "add", "args": {"numbers": [16384, 86413]}}'
+      subtraction: '{"tool": "subtract", "args": {"minuend": 100, "subtrahends": [25]}}'
+      multiplication: '{"tool": "multiply", "args": {"numbers": [12, 8]}}'
+      division: '{"tool": "divide", "args": {"dividend": 100, "divisors": [4]}}'
+      exponentiation: '{"tool": "power", "args": {"base": 2, "exponent": 10}}'
+      square_root: '{"tool": "sqrt", "args": {"number": 25}}'
+      factorial: '{"tool": "factorial", "args": {"number": 5}}'
+      modulo: '{"tool": "modulo", "args": {"dividend": 17, "divisor": 5}}'
+      absolute_value: '{"tool": "absolute", "args": {"number": -5}}'
+      
+    non_supported_query: '{"error": "I can only help with weather information (US cities/zip codes) or mathematical calculations using my MCP tools."}'
+    
+  examples:
+    weather:
+      - input: "What's the weather in Boston?"
+        output: '{"tool": "get_weather", "args": {"city": "Boston"}}'
+      - input: "How's the weather in 90210?"
+        output: '{"tool": "get_weather", "args": {"zip_code": "90210"}}'
+      - input: "Is it raining in Miami?"
+        output: '{"tool": "get_weather", "args": {"city": "Miami"}}'
+        
+    math:
+      - input: "What is 16384 + 86413?"
+        output: '{"tool": "add", "args": {"numbers": [16384, 86413]}}'
+      - input: "Calculate 100 - 25"
+        output: '{"tool": "subtract", "args": {"minuend": 100, "subtrahends": [25]}}'
+      - input: "What's 12 times 8?"
+        output: '{"tool": "multiply", "args": {"numbers": [12, 8]}}'
+
 # Location Extraction Configuration
 location_extraction:
   # Stop words to filter out when extracting locations
