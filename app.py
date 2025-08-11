@@ -1,6 +1,8 @@
 import os
 import json
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import time
 import logging
 import yaml
@@ -41,6 +43,46 @@ def load_config():
         raise
 
 CONFIG = load_config()
+
+class OptimizedHTTPClient:
+    """HTTP client with connection pooling and retry logic"""
+    
+    def __init__(self):
+        self.session = requests.Session()
+        
+        # Configure connection pooling and retry strategy
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=0.3,
+            status_forcelist=[500, 502, 503, 504, 429],
+            allowed_methods=["GET", "POST"]
+        )
+        
+        adapter = HTTPAdapter(
+            pool_connections=10,  # Number of connection pools
+            pool_maxsize=20,      # Max connections per pool
+            max_retries=retry_strategy
+        )
+        
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
+        
+        # Keep-alive headers for better performance
+        self.session.headers.update({
+            'Connection': 'keep-alive',
+            'Keep-Alive': 'timeout=30, max=100'
+        })
+    
+    def post(self, url, **kwargs):
+        """POST request with connection pooling"""
+        return self.session.post(url, **kwargs)
+    
+    def get(self, url, **kwargs):
+        """GET request with connection pooling"""
+        return self.session.get(url, **kwargs)
+
+# Global HTTP client instance
+http_client = OptimizedHTTPClient()
 
 def safe_log_token(token_name, token_value):
     """Safely log token information without exposing the actual value"""
@@ -149,7 +191,7 @@ slack = WebClient(token=SLACK_TOKEN)
 verifier = SignatureVerifier(SLACK_SECRET)
 
 class SSECalculatorClient:
-    """SSE client for calculator MCP server"""
+    """SSE client for calculator MCP server with event-driven architecture"""
     
     def __init__(self, calc_server_host, calc_server_port, calc_server_protocol):
         self.calc_server_host = calc_server_host
@@ -157,7 +199,8 @@ class SSECalculatorClient:
         self.calc_server_protocol = calc_server_protocol
         self.client_id = str(uuid.uuid4())
         self.sse_client = None
-        self.response_queue = {}
+        self.response_events = {}  # request_id -> threading.Event
+        self.response_data = {}    # request_id -> response_data
         self.connected = False
         self.lock = threading.Lock()
         
@@ -172,7 +215,7 @@ class SSECalculatorClient:
         """Establish SSE connection"""
         try:
             logger.info(f"Connecting to calculator SSE server: {self.sse_url}")
-            response = requests.get(self.sse_url, stream=True, timeout=10)
+            response = http_client.get(self.sse_url, stream=True, timeout=10)
             response.raise_for_status()
             
             self.sse_client = sseclient.SSEClient(response)
@@ -189,7 +232,7 @@ class SSECalculatorClient:
             self.connected = False
     
     def _handle_sse_messages(self):
-        """Handle incoming SSE messages"""
+        """Handle incoming SSE messages with event-driven architecture"""
         try:
             for event in self.sse_client.events():
                 if not self.connected:
@@ -205,7 +248,11 @@ class SSECalculatorClient:
                         request_id = data.get("request_id")
                         if request_id:
                             with self.lock:
-                                self.response_queue[request_id] = data.get("data")
+                                # Store response data
+                                self.response_data[request_id] = data.get("data")
+                                # Signal waiting thread
+                                if request_id in self.response_events:
+                                    self.response_events[request_id].set()
                     elif message_type == "heartbeat":
                         logger.debug(f"SSE heartbeat received: {data.get('data', {}).get('timestamp')}")
                     else:
@@ -221,11 +268,16 @@ class SSECalculatorClient:
             self.connected = False
     
     def call_tool(self, tool_name, arguments):
-        """Make MCP tool call via SSE"""
+        """Make MCP tool call via SSE with event-driven waiting"""
         if not self.connected:
             return "Error: Not connected to calculator SSE server"
         
         request_id = str(uuid.uuid4())
+        
+        # Create event for this request
+        event = threading.Event()
+        with self.lock:
+            self.response_events[request_id] = event
         
         # Prepare MCP request
         mcp_request = {
@@ -246,7 +298,7 @@ class SSECalculatorClient:
         }
         
         try:
-            response = requests.post(
+            response = http_client.post(
                 self.mcp_url,
                 json=payload,
                 headers={"Content-Type": "application/json"},
@@ -254,28 +306,40 @@ class SSECalculatorClient:
             )
             response.raise_for_status()
             
-            # Wait for response via SSE
-            timeout = time.time() + 30  # 30 second timeout
-            while time.time() < timeout:
+            # Wait for event (no CPU polling!) - reduced timeout for faster failures
+            if event.wait(timeout=10):
                 with self.lock:
-                    if request_id in self.response_queue:
-                        response_data = self.response_queue.pop(request_id)
-                        if "result" in response_data:
-                            return response_data["result"]["content"][0]["text"]
-                        elif "error" in response_data:
-                            return f"Error: {response_data['error']['message']}"
-                        else:
-                            return "Unknown error occurred"
-                
-                time.sleep(0.1)  # Short polling interval
-            
-            return "Error: Timeout waiting for SSE response"
+                    response_data = self.response_data.pop(request_id, None)
+                    self.response_events.pop(request_id, None)
+                    
+                if response_data:
+                    if "result" in response_data:
+                        return response_data["result"]["content"][0]["text"]
+                    elif "error" in response_data:
+                        return f"Error: {response_data['error']['message']}"
+                    else:
+                        return "Unknown error occurred"
+                else:
+                    return "Error: No response data received"
+            else:
+                # Cleanup on timeout
+                with self.lock:
+                    self.response_events.pop(request_id, None)
+                    self.response_data.pop(request_id, None)
+                return "Error: Timeout waiting for SSE response (10s)"
             
         except requests.exceptions.ConnectionError:
+            # Cleanup on error
+            with self.lock:
+                self.response_events.pop(request_id, None)
             return f"Error: Could not connect to calculator SSE server"
         except requests.exceptions.Timeout:
+            with self.lock:
+                self.response_events.pop(request_id, None)
             return f"Error: Timeout connecting to calculator SSE server"
         except Exception as e:
+            with self.lock:
+                self.response_events.pop(request_id, None)
             return f"Error calling calculator SSE server: {str(e)}"
     
     def disconnect(self):
@@ -455,7 +519,7 @@ class GeminiMCPClient:
             }
             
             try:
-                response = requests.post(
+                response = http_client.post(
                     server_url, 
                     json=payload, 
                     headers={"Content-Type": "application/json"},
@@ -743,33 +807,31 @@ def cleanup():
 
 atexit.register(cleanup)
 
-processed_messages = {}
-MAX_PROCESSED_MESSAGES = 1000
-MESSAGE_EXPIRY_SECONDS = 300
+# Simple stateless message processing (cloud-friendly)
+# Note: This approach avoids in-memory persistence for better cloud portability
+# In production, consider using external cache (Redis) if duplicate detection is critical
 
-def cleanup_expired_messages():
-    """Remove expired messages from the processed set"""
-    current_time = time.time()
-    expired_keys = [
-        key for key, timestamp in processed_messages.items()
-        if current_time - timestamp > MESSAGE_EXPIRY_SECONDS
-    ]
-    for key in expired_keys:
-        processed_messages.pop(key, None)
-    
-    if len(processed_messages) > MAX_PROCESSED_MESSAGES:
-        sorted_items = sorted(processed_messages.items(), key=lambda x: x[1])
-        for key, _ in sorted_items[:100]:
-            processed_messages.pop(key, None)
+# Constants for backward compatibility with existing code
+MESSAGE_EXPIRY_SECONDS = 300
+MAX_PROCESSED_MESSAGES = 1000
+processed_messages = {}  # Empty dict for compatibility - not used in stateless mode
 
 def is_message_processed(message_key):
-    """Check if a message has already been processed"""
-    cleanup_expired_messages()
-    return message_key in processed_messages
+    """Check if a message has already been processed - stateless implementation"""
+    # For cloud portability, we don't maintain persistent state
+    # This means some duplicate messages may be processed
+    # Consider implementing external cache (Redis/Memcached) if needed
+    return False
 
 def mark_message_processed(message_key):
-    """Mark a message as processed with current timestamp"""
-    processed_messages[message_key] = time.time()
+    """Mark a message as processed - stateless implementation"""
+    # No-op for cloud portability
+    # In production, consider external cache for duplicate detection
+    pass
+
+def cleanup_expired_messages():
+    """Legacy function - no-op for stateless implementation"""
+    pass
 
 # ==========================================
 # SLACK THREADING AND REACTION HELPERS
@@ -898,7 +960,7 @@ def get_bot_user_id():
         return None
 
 user_last_request = {}
-MIN_REQUEST_INTERVAL = 2
+MIN_REQUEST_INTERVAL = 1  # Reduced from 2 to 1 second for better responsiveness
 
 def is_rate_limited(user_id):
     """Check if user is making requests too quickly"""
