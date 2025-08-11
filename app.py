@@ -31,7 +31,7 @@ logging.getLogger('requests').setLevel(logging.WARNING)
 
 def load_config():
     """Load configuration from YAML file"""
-    config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
+    config_path = os.path.join(os.path.dirname(__file__), 'config', 'config.yaml')
     try:
         with open(config_path, 'r', encoding='utf-8') as file:
             return yaml.safe_load(file)
@@ -1397,6 +1397,110 @@ def slack_events():
     
     # Always return 200 to acknowledge receipt
     return "", 200
+
+# @app.route("/test", methods=["POST", "GET"])
+# def test_weather():
+#     """
+#     Test endpoint that supports both natural language and direct tool calls
+#     
+#     POST /test with JSON:
+#     - {"text": "What's the weather in Miami?"} - Natural language
+#     - {"city": "Miami"} - Direct city call
+#     - {"zip_code": "33101"} - Direct ZIP code call
+#     
+#     GET /test - Returns endpoint info
+#     """
+#     
+#     if request.method == "GET":
+#         return jsonify({
+#             "endpoint": "/test",
+#             "methods": ["GET", "POST"],
+#             "description": "Test MCP Weather Bot functionality",
+#             "examples": {
+#                 "natural_language": {"text": "What's the weather in Miami?"},
+#                 "direct_city": {"city": "Miami"},
+#                 "direct_zip": {"zip_code": "33101"}
+#             },
+#             "mcp_server_url": MCP_SERVER_URL,
+#             "gemini_model": GEMINI_MODEL,
+#             "status": "ready"
+#         }), 200
+#     
+#     # Handle POST requests
+#     try:
+#         data = request.get_json()
+#         
+#         if not data:
+#             return jsonify({
+#                 "error": "No JSON data provided",
+#                 "usage": "Send JSON with 'text', 'city', or 'zip_code' parameter"
+#             }), 400
+#         
+#         print(f"Test endpoint called with: {data}")
+#         
+#         # Support multiple input formats
+#         if "text" in data:
+#             # Natural language processing via Gemini + MCP
+#             user_text = data["text"]
+#             print(f"Processing natural language: '{user_text}'")
+#             resp = client.send({"text": user_text})
+#             
+#         elif "city" in data:
+#             # Direct city tool call (bypass Gemini)
+#             city = data["city"]
+#             print(f"Direct city call: '{city}'")
+#             resp = client.send({"tool": "get_weather", "args": {"city": city}})
+#             
+#         elif "zip_code" in data:
+#             # Direct ZIP code tool call (bypass Gemini)
+#             zip_code = data["zip_code"]
+#             print(f"Direct ZIP call: '{zip_code}'")
+#             resp = client.send({"tool": "get_weather", "args": {"zip_code": zip_code}})
+#             
+#         else:
+#             return jsonify({
+#                 "error": "Invalid request format",
+#                 "required": "One of: 'text', 'city', or 'zip_code'",
+#                 "examples": {
+#                     "natural_language": {"text": "weather in Phoenix"},
+#                     "direct_city": {"city": "Phoenix"},
+#                     "direct_zip": {"zip_code": "85044"}
+#                 }
+#             }), 400
+#         
+#         # Process response
+#         if not resp:
+#             return jsonify({"error": "No response from MCP client"}), 500
+#             
+#         content = resp.get("tool_result", {}).get("content", [])
+#         
+#         # Extract text from the first content item
+#         if content and len(content) > 0:
+#             result = content[0].get("text", "No weather data received")
+#             print(f"Response: {result}")
+#             
+#             return jsonify({
+#                 "success": True,
+#                 "response": result,
+#                 "request": data,
+#                 "timestamp": time.time()
+#             }), 200
+#         else:
+#             print("No content in MCP response")
+#             return jsonify({
+#                 "error": "No content received from MCP client",
+#                 "response_data": resp
+#             }), 500
+#             
+#     except RequestException as e:
+#         error_msg = f"Network error connecting to MCP server: {str(e)}"
+#         print(f"{error_msg}")
+#         return jsonify({"error": error_msg}), 503
+#         
+#     except Exception as e:
+#         error_msg = f"Internal error: {str(e)}"
+#         print(f"{error_msg}")
+#         return jsonify({"error": error_msg}), 500
 
 @app.route("/health", methods=["GET"])
 def health_check():
