@@ -170,6 +170,56 @@ gemini_instructions:
       - input: "What's 12 times 8?"
         output: '{"tool": "multiply", "args": {"numbers": [12, 8]}}'
 
+# Client Response Messages and Constants
+client_messages:
+  # Error and status messages
+  error_messages:
+    no_weather_data: "No weather data received from the server."
+    no_calculation_result: "No calculation result received from the server."
+    empty_input: "Please specify a city or zip code for weather information or a mathematical calculation."
+    safety_restriction: "I apologize, but I cannot process that request due to content safety restrictions. Please try rephrasing your question about weather or calculations."
+    understanding_error: "I apologize, but I couldn't understand how to help with that request. Please ask about weather information (US cities/zip codes) or mathematical calculations."
+    processing_error: "I apologize, but I had trouble processing that request. Please ask about weather information (US cities/zip codes) or mathematical calculations."
+    gemini_not_configured: "Gemini model is not configured. Please check your GOOGLE_API_KEY."
+    
+  # Response format messages
+  response_messages:
+    weather_prefix: "Weather for"
+    temperature_label: "Temperature:"
+    conditions_label: "Conditions:"
+    result_prefix: "The result is:"
+    generic_result: "Result:"
+    weather_data_fallback: "Weather data:"
+    
+  # Tool categories and arrays
+  tool_categories:
+    calculator_tools:
+      - "add"
+      - "subtract" 
+      - "multiply"
+      - "divide"
+      - "power"
+      - "sqrt"
+      - "factorial"
+      - "modulo"
+      - "absolute"
+      - "parse_expression"
+      
+    weather_tools:
+      - "get_weather"
+      
+    all_calculator_tools: # For easy reference in code
+      - "add"
+      - "subtract"
+      - "multiply"
+      - "divide" 
+      - "power"
+      - "sqrt"
+      - "factorial"
+      - "modulo"
+      - "absolute"
+      - "parse_expression"
+
 # Location Extraction Configuration
 location_extraction:
   # Stop words to filter out when extracting locations
