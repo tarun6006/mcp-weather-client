@@ -82,6 +82,7 @@ class SSECalculatorClient:
     def send_request(self, request_data: Dict[str, Any], timeout: int = 30) -> Optional[Dict[str, Any]]:
         """Send request to calculator server via SSE"""
         if not self.connected:
+            #emoji Fix
             logger.error("SSE client not connected")
             return None
         

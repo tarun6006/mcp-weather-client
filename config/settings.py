@@ -38,6 +38,7 @@ WEATHER_MCP_URL = f"{WEATHER_MCP_PROTOCOL}://{WEATHER_MCP_HOST}:{WEATHER_MCP_POR
 
 # Calculator MCP Server Configuration
 # Get calculator host and clean it if it includes protocol
+#Host Fix
 _calc_host_raw = os.getenv("CALC_MCP_HOST", "localhost")
 # Remove protocol if present (e.g., "https://example.com" -> "example.com")
 if "://" in _calc_host_raw:

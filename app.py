@@ -855,8 +855,31 @@ def check_message_already_processed(channel, message_ts):
         logger.error(f"Error checking if message already processed: {e}")
         return False
 
+def is_successful_response(response_text):
+    """Check if response indicates success (not an error or timeout)"""
+    error_indicators = [
+        "error", "Error", "ERROR",
+        "timeout", "Timeout", "TIMEOUT", 
+        "failed", "Failed", "FAILED",
+        "sorry", "Sorry", "SORRY",
+        "unable", "Unable", "UNABLE",
+        "cannot", "Cannot", "CANNOT",
+        "not found", "Not found", "NOT FOUND",
+        "no data", "No data", "NO DATA",
+        "try again", "Try again", "TRY AGAIN",
+        "encountered an error", "internal error", "service unavailable"
+    ]
+    
+    # Check if response contains error indicators
+    response_lower = response_text.lower()
+    for indicator in error_indicators:
+        if indicator.lower() in response_lower:
+            return False
+    
+    return True
+
 def send_threaded_response_with_reaction(channel, thread_ts, response_text, user_id=None):
-    """Send a threaded response and add green tick reaction to original message"""
+    """Send a threaded response and conditionally add green tick reaction for successful responses"""
     try:
         # Add user tag to response if user_id is provided
         if user_id:
@@ -874,34 +897,37 @@ def send_threaded_response_with_reaction(channel, thread_ts, response_text, user
         if thread_response.get("ok"):
             logger.info(f"Thread response sent successfully to {channel}")
             
-            # Add green tick reaction to original message
-            try:
-                reaction_response = slack.reactions_add(
-                    channel=channel,
-                    timestamp=thread_ts,
-                    name="white_check_mark"  # Green tick emoji name in Slack
-                )
-                
-                if reaction_response.get("ok"):
-                    logger.info(f"Green tick reaction added to message {thread_ts}")
-                else:
-                    error_msg = reaction_response.get('error', 'Unknown error')
-                    if error_msg == 'missing_scope':
-                        logger.error(f"Cannot add reaction - missing 'reactions:write' scope. Please add this scope to your Slack app.")
-                    elif error_msg == 'already_reacted':
-                        logger.debug(f"Reaction already exists on message {thread_ts}")
-                    elif error_msg == 'no_reaction':
-                        logger.warning(f"Invalid reaction name 'white_check_mark' for message {thread_ts}")
-                    else:
-                        logger.warning(f"Failed to add reaction to message {thread_ts}: {error_msg}")
+            # Only add green tick reaction for successful responses
+            if is_successful_response(response_text):
+                try:
+                    reaction_response = slack.reactions_add(
+                        channel=channel,
+                        timestamp=thread_ts,
+                        name="white_check_mark"  # Green tick emoji name in Slack
+                    )
                     
-            except Exception as reaction_error:
-                if 'missing_scope' in str(reaction_error):
-                    logger.error(f"Cannot add reaction - missing 'reactions:write' scope: {reaction_error}")
-                elif 'already_reacted' in str(reaction_error):
-                    logger.debug(f"Reaction already exists on message {thread_ts}: {reaction_error}")
-                else:
-                    logger.error(f"Error adding reaction to message {thread_ts}: {reaction_error}")
+                    if reaction_response.get("ok"):
+                        logger.info(f"Green tick reaction added to message {thread_ts} for successful response")
+                    else:
+                        error_msg = reaction_response.get('error', 'Unknown error')
+                        if error_msg == 'missing_scope':
+                            logger.error(f"Cannot add reaction - missing 'reactions:write' scope. Please add this scope to your Slack app.")
+                        elif error_msg == 'already_reacted':
+                            logger.debug(f"Reaction already exists on message {thread_ts}")
+                        elif error_msg == 'no_reaction':
+                            logger.warning(f"Invalid reaction name 'white_check_mark' for message {thread_ts}")
+                        else:
+                            logger.warning(f"Failed to add reaction to message {thread_ts}: {error_msg}")
+                        
+                except Exception as reaction_error:
+                    if 'missing_scope' in str(reaction_error):
+                        logger.error(f"Cannot add reaction - missing 'reactions:write' scope: {reaction_error}")
+                    elif 'already_reacted' in str(reaction_error):
+                        logger.debug(f"Reaction already exists on message {thread_ts}: {reaction_error}")
+                    else:
+                        logger.error(f"Error adding reaction to message {thread_ts}: {reaction_error}")
+            else:
+                logger.info(f"No green tick added for error/timeout response: {response_text[:50]}...")
             
             return True
         else:
