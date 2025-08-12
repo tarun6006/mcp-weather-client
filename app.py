@@ -713,18 +713,49 @@ REMEMBER: You are connected to specialized MCP servers. You MUST use these MCP t
 Only respond with the JSON object, nothing else."""
 
         try:
+            # First attempt with full system prompt
             response = self.model.generate_content(f"{system_prompt}\n\nUser request: {user_input}")
             
             # Check if response was blocked by safety filters
             if not response.candidates or not response.candidates[0].content.parts:
-                logger.error(f"Gemini response blocked by safety filters. Finish reason: {response.candidates[0].finish_reason if response.candidates else 'Unknown'}")
-                return {
-                    "tool_result": {
-                        "content": [{
-                            "text": "I apologize, but I cannot process that request due to content safety restrictions. Please try rephrasing your question about weather or calculations."
-                        }]
+                finish_reason = response.candidates[0].finish_reason if response.candidates else 'Unknown'
+                logger.warning(f"Gemini response blocked by safety filters. User input: '{user_input}'. Finish reason: {finish_reason}")
+                
+                # Try with a simpler, less detailed prompt as fallback
+                simple_prompt = f"""You are a helpful assistant that calls weather and calculator tools.
+
+For weather questions, respond with: {{"tool": "get_weather", "args": {{"city": "CityName"}}}}
+For math questions like "2+5", respond with: {{"tool": "parse_expression", "args": {{"expression": "2+5"}}}}
+
+User request: {user_input}
+
+Respond with only the JSON tool call:"""
+
+                logger.info(f"Attempting fallback with simpler prompt for: {user_input}")
+                
+                try:
+                    fallback_response = self.model.generate_content(simple_prompt)
+                    if fallback_response.candidates and fallback_response.candidates[0].content.parts:
+                        logger.info(f"Fallback prompt succeeded for: {user_input}")
+                        response = fallback_response  # Use the fallback response
+                    else:
+                        logger.error(f"Both main and fallback prompts failed for: {user_input}")
+                        return {
+                            "tool_result": {
+                                "content": [{
+                                    "text": f"I had trouble processing your request about '{user_input}'. This seems like a harmless weather or math question. Please try asking: 'What's the weather in [city name]?' or 'Calculate [math expression]'."
+                                }]
+                            }
+                        }
+                except Exception as fallback_error:
+                    logger.error(f"Fallback prompt also failed: {fallback_error}")
+                    return {
+                        "tool_result": {
+                            "content": [{
+                                "text": f"I had trouble processing your request about '{user_input}'. This seems like a harmless weather or math question. Please try asking: 'What's the weather in [city name]?' or 'Calculate [math expression]'."
+                            }]
+                        }
                     }
-                }
             
             gemini_response = response.text.strip()
             
