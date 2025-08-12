@@ -151,31 +151,25 @@ logger.info(f"  Model: {GEMINI_MODEL}")
 safe_log_token("GOOGLE_API_KEY", GOOGLE_API_KEY)
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
+    # Load Gemini configuration from config YAML
+    gemini_config = CONFIG.get('gemini_config', {})
+    
+    # Generation configuration from config
+    gen_config = gemini_config.get('generation_config', {})
     generation_config = {
-        "temperature": 0.1,
-        "top_p": 0.8,
-        "top_k": 20,
-        "max_output_tokens": 300,
+        "temperature": gen_config.get('temperature', 0.1),
+        "top_p": gen_config.get('top_p', 0.8),
+        "top_k": gen_config.get('top_k', 20),
+        "max_output_tokens": gen_config.get('max_output_tokens', 300),
     }
-    # Configure safety settings to be very permissive for harmless weather/math queries
-    safety_settings = [
-        {
-            "category": "HARM_CATEGORY_HARASSMENT",
-            "threshold": "BLOCK_ONLY_HIGH"
-        },
-        {
-            "category": "HARM_CATEGORY_HATE_SPEECH", 
-            "threshold": "BLOCK_ONLY_HIGH"
-        },
-        {
-            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-            "threshold": "BLOCK_ONLY_HIGH"
-        },
-        {
-            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-            "threshold": "BLOCK_ONLY_HIGH"
-        }
-    ]
+    
+    # Safety settings from config - very permissive for harmless weather/math queries
+    safety_settings = gemini_config.get('safety_settings', [
+        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_ONLY_HIGH"},
+        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_ONLY_HIGH"},
+        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_ONLY_HIGH"},
+        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"}
+    ])
     model = genai.GenerativeModel(
         GEMINI_MODEL, 
         generation_config=generation_config,
@@ -722,14 +716,10 @@ Only respond with the JSON object, nothing else."""
                 logger.warning(f"Gemini response blocked by safety filters. User input: '{user_input}'. Finish reason: {finish_reason}")
                 
                 # Try with a simpler, less detailed prompt as fallback
-                simple_prompt = f"""You are a helpful assistant that calls weather and calculator tools.
-
-For weather questions, respond with: {{"tool": "get_weather", "args": {{"city": "CityName"}}}}
-For math questions like "2+5", respond with: {{"tool": "parse_expression", "args": {{"expression": "2+5"}}}}
-
-User request: {user_input}
-
-Respond with only the JSON tool call:"""
+                fallback_config = CONFIG.get('client_messages', {}).get('fallback_prompts', {})
+                simple_prompt_template = fallback_config.get('simple_prompt_template', 
+                    'Convert this to a tool call:\n\n{user_input}\n\nJSON response:')
+                simple_prompt = simple_prompt_template.format(user_input=user_input)
 
                 logger.info(f"Attempting fallback with simpler prompt for: {user_input}")
                 
@@ -740,10 +730,48 @@ Respond with only the JSON tool call:"""
                         response = fallback_response  # Use the fallback response
                     else:
                         logger.error(f"Both main and fallback prompts failed for: {user_input}")
+                        
+                        # Final fallback: simple pattern matching for obvious cases
+                        user_lower = user_input.lower()
+                        pattern_config = CONFIG.get('client_messages', {}).get('pattern_matching', {})
+                        
+                        # Check for obvious math patterns
+                        math_patterns = pattern_config.get('math_patterns', ['calculate', 'what is'])
+                        if any(pattern in user_lower for pattern in math_patterns):
+                            # Extract the math expression (remove bot mention and common prefixes)
+                            math_expression = user_input
+                            # Remove bot mention
+                            if '<@' in math_expression:
+                                math_expression = ' '.join([word for word in math_expression.split() if not word.startswith('<@')])
+                            # Remove common prefixes
+                            prefixes = pattern_config.get('cleanup_prefixes', ['hey', 'what is'])
+                            for prefix in prefixes:
+                                if math_expression.lower().startswith(prefix):
+                                    math_expression = math_expression[len(prefix):].strip()
+                            
+                            logger.info(f"Using pattern matching fallback for math: '{math_expression}'")
+                            return self._call_mcp_tool('parse_expression', {'expression': math_expression.strip()})
+                        
+                        # Check for weather patterns
+                        weather_patterns = pattern_config.get('weather_patterns', ['weather'])
+                        if any(pattern in user_lower for pattern in weather_patterns):
+                            # Try to extract city name (basic pattern)
+                            words = user_input.split()
+                            # Look for words that might be cities (after common words)
+                            skip_words = pattern_config.get('skip_words', ['hey', 'weather', 'bot'])
+                            for word in words:
+                                clean_word = word.strip('.,?!').replace('<@', '').replace('>', '')
+                                if len(clean_word) > 2 and clean_word.lower() not in skip_words and not clean_word.startswith('U'):
+                                    logger.info(f"Using pattern matching fallback for weather in: '{clean_word}'")
+                                    return self._call_mcp_tool('get_weather', {'city': clean_word})
+                        
+                        # Use configured error message
+                        error_msg = self.error_messages.get('safety_fallback_help', 
+                            "I had trouble processing your request about '{user_input}'. Please try rephrasing.")
                         return {
                             "tool_result": {
                                 "content": [{
-                                    "text": f"I had trouble processing your request about '{user_input}'. This seems like a harmless weather or math question. Please try asking: 'What's the weather in [city name]?' or 'Calculate [math expression]'."
+                                    "text": error_msg.format(user_input=user_input)
                                 }]
                             }
                         }
@@ -842,27 +870,19 @@ atexit.register(cleanup)
 # Note: This approach avoids in-memory persistence for better cloud portability
 # In production, consider using external cache (Redis) if duplicate detection is critical
 
+# Import message processing utilities
+from utils.security import (
+    is_message_processed, mark_message_processed, cleanup_old_messages,
+    processed_messages
+)
+
 # Constants for backward compatibility with existing code
 MESSAGE_EXPIRY_SECONDS = 300
 MAX_PROCESSED_MESSAGES = 1000
-processed_messages = {}  # Empty dict for compatibility - not used in stateless mode
-
-def is_message_processed(message_key):
-    """Check if a message has already been processed - stateless implementation"""
-    # For cloud portability, we don't maintain persistent state
-    # This means some duplicate messages may be processed
-    # Consider implementing external cache (Redis/Memcached) if needed
-    return False
-
-def mark_message_processed(message_key):
-    """Mark a message as processed - stateless implementation"""
-    # No-op for cloud portability
-    # In production, consider external cache for duplicate detection
-    pass
 
 def cleanup_expired_messages():
-    """Legacy function - no-op for stateless implementation"""
-    pass
+    """Clean up expired messages - wrapper for utils.security function"""
+    cleanup_old_messages()
 
 # ==========================================
 # SLACK THREADING AND REACTION HELPERS
@@ -892,7 +912,9 @@ def check_message_already_processed(channel, message_ts):
             else:
                 error_msg = reactions_response.get('error', 'Unknown error')
                 if error_msg == 'missing_scope':
-                    logger.error(f"Cannot check reactions - missing 'reactions:read' scope. Please add this scope to your Slack app.")
+                    error_message = CONFIG.get('client_messages', {}).get('error_messages', {}).get('reactions_read_missing', 
+                        "Cannot check reactions - missing 'reactions:read' scope. Please add this scope to your Slack app.")
+                    logger.error(error_message)
                 else:
                     logger.warning(f"Failed to get reactions for message {message_ts}: {error_msg}")
                     
@@ -1287,7 +1309,11 @@ def slack_events():
                 # Send response in thread with green tick reaction
                 success = send_threaded_response_with_reaction(channel, event_ts, result, user)
                 
-                if not success:
+                if success:
+                    # Mark message as processed after successful response
+                    mark_message_processed(message_key)
+                    logger.debug(f"Marked app mention as processed: {message_key}")
+                else:
                     # Fallback to regular message if threading fails
                     try:
                         if slack:
@@ -1422,7 +1448,11 @@ def slack_events():
                     # Send response in thread with green tick reaction
                     success = send_threaded_response_with_reaction(channel, event_ts, result, user)
                     
-                    if not success:
+                    if success:
+                        # Mark message as processed after successful response
+                        mark_message_processed(message_key)
+                        logger.debug(f"Marked DM as processed: {message_key}")
+                    else:
                         # Fallback to regular message if threading fails
                         try:
                             if slack:
