@@ -24,7 +24,7 @@ class SSECalculatorClient:
         self.lock = threading.Lock()
         
         # Build SSE connection URL
-        port_str = f":{calc_server_port}" if calc_server_port not in ["80", "443"] else ""
+        port_str = f":{calc_server_port}" if str(calc_server_port) not in ["80", "443"] else ""
         self.sse_url = f"{calc_server_protocol}://{calc_server_host}{port_str}/sse/connect?client_id={self.client_id}"
         self.mcp_url = f"{calc_server_protocol}://{calc_server_host}{port_str}/sse/mcp"
         
@@ -87,6 +87,7 @@ class SSECalculatorClient:
         
         request_id = str(uuid.uuid4())
         request_data["id"] = request_id
+        request_data["client_id"] = self.client_id
         
         try:
             # Send request to SSE MCP endpoint with client ID
