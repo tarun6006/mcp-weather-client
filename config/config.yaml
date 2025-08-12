@@ -181,6 +181,14 @@ client_messages:
     understanding_error: "I apologize, but I couldn't understand how to help with that request. Please ask about weather information (US cities/zip codes) or mathematical calculations."
     processing_error: "I apologize, but I had trouble processing that request. Please ask about weather information (US cities/zip codes) or mathematical calculations."
     gemini_not_configured: "Gemini model is not configured. Please check your GOOGLE_API_KEY."
+    safety_fallback_help: "I had trouble processing your request about '{user_input}'. This seems like a harmless weather or math question. Please try asking: 'What's the weather in [city name]?' or 'Calculate [math expression]'."
+    reactions_read_missing: "Cannot check reactions - missing 'reactions:read' scope. Please add this scope to your Slack app."
+    reactions_write_missing: "Cannot add reaction - missing 'reactions:write' scope. Please add this scope to your Slack app."
+    reaction_already_exists: "Reaction already exists on message {message_ts}"
+    invalid_reaction_name: "Invalid reaction name 'white_check_mark' for message {message_ts}"
+    reaction_failed: "Failed to add reaction to message {message_ts}: {error}"
+    thread_check_failed: "Failed to get thread replies for message {message_ts}: {error}"
+    thread_error: "Error checking thread replies for message {message_ts}: {error}"
     
   # Response format messages
   response_messages:
@@ -219,6 +227,81 @@ client_messages:
       - "modulo"
       - "absolute"
       - "parse_expression"
+
+  # Fallback system configuration
+  fallback_prompts:
+    simple_prompt_template: |
+      Convert this to a tool call:
+
+      {user_input}
+
+      If it's about weather, respond: {{"tool": "get_weather", "args": {{"city": "CITYNAME"}}}}
+      If it's math like "four times two", respond: {{"tool": "parse_expression", "args": {{"expression": "four times two"}}}}
+
+      JSON response:
+      
+  # Pattern matching fallback configuration
+  pattern_matching:
+    math_patterns:
+      - "times"
+      - "plus"
+      - "minus"
+      - "divided"
+      - "multiply"
+      - "add"
+      - "subtract"
+      - "+"
+      - "-"
+      - "*"
+      - "/"
+      - "calculate"
+      - "what is"
+      
+    weather_patterns:
+      - "weather"
+      - "temperature"
+      - "forecast"
+      - "raining"
+      - "sunny"
+      - "cloudy"
+      
+    cleanup_prefixes:
+      - "hey"
+      - "what is"
+      - "calculate"
+      - "compute"
+      
+    skip_words:
+      - "hey"
+      - "weather"
+      - "bot"
+      - "what"
+      - "is"
+      - "the"
+      - "in"
+      - "at"
+      - "for"
+
+# Gemini AI Configuration
+gemini_config:
+  # Generation configuration
+  generation_config:
+    temperature: 0.1
+    top_p: 0.95
+    top_k: 40
+    max_output_tokens: 2048
+    candidate_count: 1
+    
+  # Safety settings - threshold levels: BLOCK_NONE, BLOCK_ONLY_HIGH, BLOCK_MEDIUM_AND_ABOVE, BLOCK_LOW_AND_ABOVE
+  safety_settings:
+    - category: "HARM_CATEGORY_HARASSMENT"
+      threshold: "BLOCK_ONLY_HIGH"
+    - category: "HARM_CATEGORY_HATE_SPEECH"
+      threshold: "BLOCK_ONLY_HIGH"
+    - category: "HARM_CATEGORY_SEXUALLY_EXPLICIT"
+      threshold: "BLOCK_ONLY_HIGH"
+    - category: "HARM_CATEGORY_DANGEROUS_CONTENT"
+      threshold: "BLOCK_ONLY_HIGH"
 
 # Location Extraction Configuration
 location_extraction:
