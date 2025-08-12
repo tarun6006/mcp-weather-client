@@ -122,7 +122,13 @@ WEATHER_MCP_PATH = os.getenv("WEATHER_MCP_PATH", "/mcp")
 WEATHER_MCP_URL = f"{WEATHER_MCP_PROTOCOL}://{WEATHER_MCP_HOST}:{WEATHER_MCP_PORT}{WEATHER_MCP_PATH}"
 
 # Calculator MCP Server Configuration
-CALC_MCP_HOST = os.getenv("CALC_MCP_HOST", "localhost")
+# Get calculator host and clean it if it includes protocol
+_calc_host_raw = os.getenv("CALC_MCP_HOST", "localhost")
+# Remove protocol if present (e.g., "https://example.com" -> "example.com")
+if "://" in _calc_host_raw:
+    CALC_MCP_HOST = _calc_host_raw.split("://", 1)[1]
+else:
+    CALC_MCP_HOST = _calc_host_raw
 CALC_MCP_PORT = int(os.getenv("CALC_MCP_PORT", "5003"))
 CALC_MCP_PROTOCOL = os.getenv("CALC_MCP_PROTOCOL", "http")
 CALC_MCP_PATH = os.getenv("CALC_MCP_PATH", "/mcp")
@@ -199,7 +205,7 @@ class SSECalculatorClient:
         self.lock = threading.Lock()
         
         # Build SSE connection URL
-        port_str = f":{calc_server_port}" if calc_server_port not in ["80", "443"] else ""
+        port_str = f":{calc_server_port}" if str(calc_server_port) not in ["80", "443"] else ""
         self.sse_url = f"{calc_server_protocol}://{calc_server_host}{port_str}/sse/connect?client_id={self.client_id}"
         self.mcp_url = f"{calc_server_protocol}://{calc_server_host}{port_str}/sse/mcp"
         
@@ -232,30 +238,40 @@ class SSECalculatorClient:
                 if not self.connected:
                     break
                 
-                try:
-                    data = json.loads(event.data)
-                    message_type = data.get("type")
-                    
-                    if message_type == "connected":
+                logger.debug(f"SSE event: {event.event}, data: {event.data}")
+                
+                if event.event == "connected":
+                    try:
+                        data = json.loads(event.data)
                         logger.debug(f"SSE connection confirmed: {data}")
-                    elif message_type == "mcp_response":
-                        request_id = data.get("request_id")
+                    except json.JSONDecodeError:
+                        logger.debug("SSE connection confirmed (non-JSON data)")
+                
+                elif event.event == "message":
+                    try:
+                        # This is the actual MCP response
+                        data = json.loads(event.data)
+                        request_id = data.get("id")
                         if request_id:
                             with self.lock:
                                 # Store response data
-                                self.response_data[request_id] = data.get("data")
+                                self.response_data[request_id] = data
                                 # Signal waiting thread
                                 if request_id in self.response_events:
                                     self.response_events[request_id].set()
-                    elif message_type == "heartbeat":
-                        logger.debug(f"SSE heartbeat received: {data.get('data', {}).get('timestamp')}")
-                    else:
-                        logger.debug(f"Unknown SSE message type: {message_type}")
-                        
-                except json.JSONDecodeError as e:
-                    logger.warning(f"Failed to parse SSE message: {e}")
-                except Exception as e:
-                    logger.error(f"Error handling SSE message: {e}")
+                                    logger.debug(f"Signaled event for request {request_id}")
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"Failed to parse SSE message: {event.data}, error: {e}")
+                
+                elif event.event == "heartbeat":
+                    try:
+                        data = json.loads(event.data)
+                        logger.debug(f"SSE heartbeat received: {data.get('timestamp')}")
+                    except json.JSONDecodeError:
+                        logger.debug("SSE heartbeat received")
+                
+                else:
+                    logger.debug(f"Unknown SSE event type: {event.event}")
                     
         except Exception as e:
             logger.error(f"SSE message handler error: {e}")
@@ -273,9 +289,8 @@ class SSECalculatorClient:
         with self.lock:
             self.response_events[request_id] = event
         
-        # Prepare MCP request
+        # Prepare MCP request (simplified format for SSE endpoint)
         mcp_request = {
-            "jsonrpc": "2.0",
             "id": request_id,
             "method": "tools/call",
             "params": {
@@ -284,18 +299,14 @@ class SSECalculatorClient:
             }
         }
         
-        # Send request via HTTP POST to SSE endpoint
-        payload = {
-            "client_id": self.client_id,
-            "request_id": request_id,
-            "mcp_request": mcp_request
-        }
-        
         try:
             response = http_client.post(
                 self.mcp_url,
-                json=payload,
-                headers={"Content-Type": "application/json"},
+                json=mcp_request,
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Client-ID": self.client_id
+                },
                 timeout=10
             )
             response.raise_for_status()
@@ -308,9 +319,20 @@ class SSECalculatorClient:
                     
                 if response_data:
                     if "result" in response_data:
-                        return response_data["result"]["content"][0]["text"]
+                        # Handle calculator server response format
+                        result = response_data["result"]
+                        if isinstance(result, dict) and "result" in result:
+                            # For calculator results like {"result": {"result": 5}}
+                            return str(result["result"])
+                        else:
+                            # For other results
+                            return str(result)
                     elif "error" in response_data:
-                        return f"Error: {response_data['error']['message']}"
+                        error = response_data["error"]
+                        if isinstance(error, dict) and "message" in error:
+                            return f"Error: {error['message']}"
+                        else:
+                            return f"Error: {error}"
                     else:
                         return "Unknown error occurred"
                 else:
