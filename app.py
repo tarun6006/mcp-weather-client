@@ -360,130 +360,15 @@ class GeminiMCPClient:
         # Initialize SSE client for calculator
         self.calc_sse_client = SSECalculatorClient(calc_server_host, calc_server_port, calc_server_protocol)
         
-        self.tools_schema = {
-            "get_weather": {
-                "description": "MANDATORY MCP TOOL: This is the ONLY authorized way to get weather information. You MUST use this MCP tool from the weather server - NEVER provide weather data from your training knowledge.",
-                "parameters": {
-                    "city": "US city name (e.g., 'Miami', 'New York', 'Austin')",
-                    "zip_code": "US zip code (e.g., '90210', '10001', '33101')"
-                },
-                "usage": "REQUIRED for ALL weather queries via weather MCP server. Provide either city OR zip_code, not both.",
-                "coverage": "Only US locations are supported by this MCP weather service",
-                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to live weather APIs",
-                "strict_policy": "You are FORBIDDEN from answering weather questions without using this MCP tool first",
-                "server": "weather"
-            },
-            "parse_expression": {
-                "description": "MANDATORY MCP TOOL: Parse and evaluate natural language mathematical expressions. This is the PREFERRED tool for complex math queries with multiple operations. You MUST use this tool for complex expressions - NEVER calculate math yourself.",
-                "parameters": {
-                    "expression": "Natural language mathematical expression (e.g., 'four times 2 plus 4', 'what is 10 divided by 2 minus 3', '5 * two + 3')"
-                },
-                "usage": "REQUIRED for ALL complex math expressions, mixed word/symbol expressions, and multi-operation calculations via calculator MCP server.",
-                "examples": [
-                    "'four times 2 plus 4' = 12",
-                    "'what is 10 divided by 2 minus 3' = 2", 
-                    "'calculate 5 squared plus 3 cubed' = 52",
-                    "'5 * two + 3' = 13"
-                ],
-                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to calculator server with advanced expression parsing",
-                "strict_policy": "You are FORBIDDEN from doing math calculations without using the MCP calculator tools",
-                "server": "calculator"
-            },
-            "add": {
-                "description": "MANDATORY MCP TOOL: Add multiple numbers together using the calculator MCP server. You MUST use this tool for addition - NEVER calculate math yourself.",
-                "parameters": {
-                    "numbers": "List of numbers to add (minimum 2 required, supports unlimited numbers)"
-                },
-                "usage": "REQUIRED for ALL addition operations via calculator MCP server. Can handle 2+ numbers in one call.",
-                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to calculator server",
-                "strict_policy": "You are FORBIDDEN from doing math calculations without using the MCP calculator tools",
-                "server": "calculator"
-            },
-            "subtract": {
-                "description": "MANDATORY MCP TOOL: Subtract multiple numbers from the first number using calculator MCP server. You MUST use this tool for subtraction - NEVER calculate math yourself.",
-                "parameters": {
-                    "minuend": "Number to subtract from",
-                    "subtrahends": "List of numbers to subtract (minimum 1 required)"
-                },
-                "usage": "REQUIRED for ALL subtraction operations via calculator MCP server. Can subtract multiple numbers sequentially.",
-                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to calculator server",
-                "strict_policy": "You are FORBIDDEN from doing math calculations without using the MCP calculator tools",
-                "server": "calculator"
-            },
-            "multiply": {
-                "description": "MANDATORY MCP TOOL: Multiply multiple numbers together using calculator MCP server. You MUST use this tool for multiplication - NEVER calculate math yourself.",
-                "parameters": {
-                    "numbers": "List of numbers to multiply (minimum 2 required, supports unlimited numbers)"
-                },
-                "usage": "REQUIRED for ALL multiplication operations via calculator MCP server. Can handle 2+ numbers in one call.",
-                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to calculator server",
-                "strict_policy": "You are FORBIDDEN from doing math calculations without using the MCP calculator tools",
-                "server": "calculator"
-            },
-            "divide": {
-                "description": "MANDATORY MCP TOOL: Divide by multiple numbers sequentially using calculator MCP server. You MUST use this tool for division - NEVER calculate math yourself.",
-                "parameters": {
-                    "dividend": "Number to be divided",
-                    "divisors": "List of numbers to divide by (minimum 1 required)"
-                },
-                "usage": "REQUIRED for ALL division operations via calculator MCP server. Can divide by multiple numbers sequentially.",
-                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to calculator server",
-                "strict_policy": "You are FORBIDDEN from doing math calculations without using the MCP calculator tools",
-                "server": "calculator"
-            },
-            "power": {
-                "description": "MANDATORY MCP TOOL: Raise base to the power of exponent using calculator MCP server. You MUST use this tool for exponentiation - NEVER calculate math yourself.",
-                "parameters": {
-                    "base": "Base number (float)",
-                    "exponent": "Exponent (float)"
-                },
-                "usage": "REQUIRED for ALL power/exponentiation operations via calculator MCP server.",
-                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to calculator server",
-                "strict_policy": "You are FORBIDDEN from doing math calculations without using the MCP calculator tools",
-                "server": "calculator"
-            },
-            "sqrt": {
-                "description": "MANDATORY MCP TOOL: Calculate square root of a number using calculator MCP server. You MUST use this tool for square roots - NEVER calculate math yourself.",
-                "parameters": {
-                    "number": "Number to calculate square root of (float)"
-                },
-                "usage": "REQUIRED for ALL square root operations via calculator MCP server.",
-                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to calculator server",
-                "strict_policy": "You are FORBIDDEN from doing math calculations without using the MCP calculator tools",
-                "server": "calculator"
-            },
-            "factorial": {
-                "description": "MANDATORY MCP TOOL: Calculate factorial of a number using calculator MCP server. You MUST use this tool for factorials - NEVER calculate math yourself.",
-                "parameters": {
-                    "number": "Non-negative integer to calculate factorial of"
-                },
-                "usage": "REQUIRED for ALL factorial operations via calculator MCP server.",
-                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to calculator server",
-                "strict_policy": "You are FORBIDDEN from doing math calculations without using the MCP calculator tools",
-                "server": "calculator"
-            },
-            "modulo": {
-                "description": "MANDATORY MCP TOOL: Calculate modulo (remainder) of division using calculator MCP server. You MUST use this tool for modulo operations - NEVER calculate math yourself.",
-                "parameters": {
-                    "dividend": "Number to be divided (float)",
-                    "divisor": "Number to divide by (float)"
-                },
-                "usage": "REQUIRED for ALL modulo/remainder operations via calculator MCP server.",
-                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to calculator server",
-                "strict_policy": "You are FORBIDDEN from doing math calculations without using the MCP calculator tools",
-                "server": "calculator"
-            },
-            "absolute": {
-                "description": "MANDATORY MCP TOOL: Calculate absolute value of a number using calculator MCP server. You MUST use this tool for absolute values - NEVER calculate math yourself.",
-                "parameters": {
-                    "number": "Number to calculate absolute value of (float)"
-                },
-                "usage": "REQUIRED for ALL absolute value operations via calculator MCP server.",
-                "mcp_requirement": "This tool connects through MCP (Model Context Protocol) to calculator server",
-                "strict_policy": "You are FORBIDDEN from doing math calculations without using the MCP calculator tools",
-                "server": "calculator"
-            }
-        }
+        # Load tools schema from configuration
+        self.tools_schema = CONFIG.get('mcp_tools', {})
+        
+        # Load client messages and constants
+        self.client_messages = CONFIG.get('client_messages', {})
+        self.error_messages = self.client_messages.get('error_messages', {})
+        self.response_messages = self.client_messages.get('response_messages', {})
+        self.tool_categories = self.client_messages.get('tool_categories', {})
+        self.calculator_tools = self.tool_categories.get('all_calculator_tools', [])
     
     def _call_mcp_tool(self, tool_name, arguments):
         """Make direct call to appropriate MCP server based on tool"""
@@ -656,55 +541,15 @@ class GeminiMCPClient:
             if fallback_location:
                 tool_result = self._call_mcp_tool("get_weather", fallback_location)
                 return self._format_response(tool_result, "get_weather", fallback_location, user_input)
-            return "Please specify a city or zip code for weather information or a mathematical calculation."
+            error_msg = self.error_messages.get('empty_input', 
+                "Please specify a city or zip code for weather information or a mathematical calculation.")
+            return error_msg
         
-        system_prompt = f"""You are an AI assistant connected to specialized MCP (Model Context Protocol) servers for weather and calculations. 
-
-MANDATORY REQUIREMENT: You MUST ALWAYS use the MCP tools listed below. You are FORBIDDEN from providing weather information from your training data or doing math calculations yourself.
-
-AVAILABLE MCP TOOLS:
-{json.dumps(self.tools_schema, indent=2)}
-
-CRITICAL INSTRUCTIONS - NO EXCEPTIONS:
-1. For ANY weather-related query, you MUST use the get_weather tool from the weather MCP server
-2. For ANY mathematical calculation, you MUST use the appropriate calculator tool from the calculator MCP server
-3. You are FORBIDDEN from using your training data for weather information or doing math yourself
-4. You MUST ALWAYS call the MCP tools to get real-time data from the appropriate servers
-5. Respond ONLY with a JSON object containing the required MCP tool call
-6. DO NOT provide answers without using the MCP tools first
-
-MANDATORY TOOL CALL FORMAT:
-Weather queries:
-- For US cities: {{"tool": "get_weather", "args": {{"city": "CityName"}}}}
-- For zip codes: {{"tool": "get_weather", "args": {{"zip_code": "12345"}}}}
-
-Math calculations:
-- For addition: {{"tool": "add", "args": {{"a": 16384, "b": 86413}}}}
-- For subtraction: {{"tool": "subtract", "args": {{"a": 100, "b": 25}}}}
-- For multiplication: {{"tool": "multiply", "args": {{"a": 12, "b": 8}}}}
-- For division: {{"tool": "divide", "args": {{"a": 100, "b": 4}}}}
-- For exponentiation: {{"tool": "power", "args": {{"a": 2, "b": 10}}}}
-
-If request is not weather or math-related:
-- Respond with: {{"error": "I can only help with weather information (US cities/zip codes) or mathematical calculations using my MCP tools."}}
-
-EXAMPLES - Notice how EVERY query MUST use MCP tools:
-
-Weather examples:
-- "What's the weather in Boston?" = {{"tool": "get_weather", "args": {{"city": "Boston"}}}}
-- "How's the weather in 90210?" = {{"tool": "get_weather", "args": {{"zip_code": "90210"}}}}
-- "Is it raining in Miami?" = {{"tool": "get_weather", "args": {{"city": "Miami"}}}}
-
-Math examples:
-- "What is 16384 + 86413?" = {{"tool": "add", "args": {{"a": 16384, "b": 86413}}}}
-- "What is the addition of 16384 and 86413?" = {{"tool": "add", "args": {{"a": 16384, "b": 86413}}}}
-- "Calculate 25 * 4" = {{"tool": "multiply", "args": {{"a": 25, "b": 4}}}}
-- "Divide 100 by 4" = {{"tool": "divide", "args": {{"a": 100, "b": 4}}}}
-- "What's 2 to the power of 10?" = {{"tool": "power", "args": {{"a": 2, "b": 10}}}}
-
-REMEMBER: You are connected to specialized MCP servers. You MUST use these MCP tools for ALL weather and math queries - never rely on your training data or do calculations yourself.
-
-Only respond with the JSON object, nothing else."""
+        # Load system prompt from configuration
+        system_prompts = CONFIG.get('system_prompts', {})
+        system_prompt_template = system_prompts.get('main_system_prompt', 
+            'You are an AI assistant. Use the available MCP tools: {tools_schema}')
+        system_prompt = system_prompt_template.format(tools_schema=json.dumps(self.tools_schema, indent=2))
 
         try:
             # First attempt with full system prompt
@@ -811,7 +656,46 @@ Only respond with the JSON object, nothing else."""
                 if fallback_location:
                     tool_result = self._call_mcp_tool("get_weather", fallback_location)
                     return self._format_response(tool_result, "get_weather", fallback_location, user_input)
-                return "I had trouble processing your request. Please ask for weather information for a US city/zip code or a mathematical calculation."
+                # Try pattern matching as final fallback before giving up
+                user_lower = user_input.lower()
+                pattern_config = CONFIG.get('client_messages', {}).get('pattern_matching', {})
+                
+                # Check for obvious math patterns
+                math_patterns = pattern_config.get('math_patterns', ['calculate', 'what is', '+', '-', '*', '/'])
+                if any(pattern in user_lower for pattern in math_patterns):
+                    # Extract the math expression (remove bot mention and common prefixes)
+                    math_expression = user_input
+                    # Remove bot mention
+                    if '<@' in math_expression:
+                        math_expression = ' '.join([word for word in math_expression.split() if not word.startswith('<@')])
+                    # Remove common prefixes
+                    prefixes = pattern_config.get('cleanup_prefixes', ['hey', 'what is'])
+                    for prefix in prefixes:
+                        if math_expression.lower().startswith(prefix):
+                            math_expression = math_expression[len(prefix):].strip()
+                    
+                    logger.info(f"Using pattern matching fallback for math after JSON parse failure: '{math_expression}'")
+                    tool_result = self._call_mcp_tool('parse_expression', {'expression': math_expression.strip()})
+                    return self._format_response(tool_result, "parse_expression", {'expression': math_expression.strip()}, user_input)
+                
+                # Check for weather patterns
+                weather_patterns = pattern_config.get('weather_patterns', ['weather'])
+                if any(pattern in user_lower for pattern in weather_patterns):
+                    # Try to extract city name (basic pattern)
+                    words = user_input.split()
+                    # Look for words that might be cities (after common words)
+                    skip_words = pattern_config.get('skip_words', ['hey', 'weather', 'bot'])
+                    for word in words:
+                        clean_word = word.strip('.,?!').replace('<@', '').replace('>', '')
+                        if len(clean_word) > 2 and clean_word.lower() not in skip_words and not clean_word.startswith('U'):
+                            logger.info(f"Using pattern matching fallback for weather after JSON parse failure: '{clean_word}'")
+                            tool_result = self._call_mcp_tool('get_weather', {'city': clean_word})
+                            return self._format_response(tool_result, "get_weather", {'city': clean_word}, user_input)
+                
+                # Use configured error message
+                error_msg = self.error_messages.get('processing_error', 
+                    "I had trouble processing your request. Please ask for weather information for a US city/zip code or a mathematical calculation.")
+                return error_msg
                 
         except Exception as e:
             error_msg = str(e)
