@@ -713,18 +713,49 @@ REMEMBER: You are connected to specialized MCP servers. You MUST use these MCP t
 Only respond with the JSON object, nothing else."""
 
         try:
+            # First attempt with full system prompt
             response = self.model.generate_content(f"{system_prompt}\n\nUser request: {user_input}")
             
             # Check if response was blocked by safety filters
             if not response.candidates or not response.candidates[0].content.parts:
-                logger.error(f"Gemini response blocked by safety filters. Finish reason: {response.candidates[0].finish_reason if response.candidates else 'Unknown'}")
-                return {
-                    "tool_result": {
-                        "content": [{
-                            "text": "I apologize, but I cannot process that request due to content safety restrictions. Please try rephrasing your question about weather or calculations."
-                        }]
+                finish_reason = response.candidates[0].finish_reason if response.candidates else 'Unknown'
+                logger.warning(f"Gemini response blocked by safety filters. User input: '{user_input}'. Finish reason: {finish_reason}")
+                
+                # Try with a simpler, less detailed prompt as fallback
+                simple_prompt = f"""You are a helpful assistant that calls weather and calculator tools.
+
+For weather questions, respond with: {{"tool": "get_weather", "args": {{"city": "CityName"}}}}
+For math questions like "2+5", respond with: {{"tool": "parse_expression", "args": {{"expression": "2+5"}}}}
+
+User request: {user_input}
+
+Respond with only the JSON tool call:"""
+
+                logger.info(f"Attempting fallback with simpler prompt for: {user_input}")
+                
+                try:
+                    fallback_response = self.model.generate_content(simple_prompt)
+                    if fallback_response.candidates and fallback_response.candidates[0].content.parts:
+                        logger.info(f"Fallback prompt succeeded for: {user_input}")
+                        response = fallback_response  # Use the fallback response
+                    else:
+                        logger.error(f"Both main and fallback prompts failed for: {user_input}")
+                        return {
+                            "tool_result": {
+                                "content": [{
+                                    "text": f"I had trouble processing your request about '{user_input}'. This seems like a harmless weather or math question. Please try asking: 'What's the weather in [city name]?' or 'Calculate [math expression]'."
+                                }]
+                            }
+                        }
+                except Exception as fallback_error:
+                    logger.error(f"Fallback prompt also failed: {fallback_error}")
+                    return {
+                        "tool_result": {
+                            "content": [{
+                                "text": f"I had trouble processing your request about '{user_input}'. This seems like a harmless weather or math question. Please try asking: 'What's the weather in [city name]?' or 'Calculate [math expression]'."
+                            }]
+                        }
                     }
-                }
             
             gemini_response = response.text.strip()
             
@@ -843,33 +874,52 @@ def check_message_already_processed(channel, message_ts):
     """Check if a message already has bot response (thread reply + green tick reaction)"""
     try:
         # Check for existing reactions on the message
-        reactions_response = slack.reactions_get(channel=channel, timestamp=message_ts)
-        
-        if reactions_response.get("ok"):
-            message_data = reactions_response.get("message", {})
-            reactions = message_data.get("reactions", [])
+        try:
+            reactions_response = slack.reactions_get(channel=channel, timestamp=message_ts)
             
-            # Check if green tick reaction exists from the bot
-            bot_user_id = get_bot_user_id()
-            for reaction in reactions:
-                if reaction.get("name") == "white_check_mark":  # Green tick emoji name in Slack
-                    users = reaction.get("users", [])
-                    if bot_user_id in users:
-                        logger.info(f"Message {message_ts} already processed (has bot's green tick reaction)")
-                        return True
+            if reactions_response.get("ok"):
+                message_data = reactions_response.get("message", {})
+                reactions = message_data.get("reactions", [])
+                
+                # Check if green tick reaction exists from the bot
+                bot_user_id = get_bot_user_id()
+                for reaction in reactions:
+                    if reaction.get("name") == "white_check_mark":  # Green tick emoji name in Slack
+                        users = reaction.get("users", [])
+                        if bot_user_id in users:
+                            logger.info(f"Message {message_ts} already processed (has bot's green tick reaction)")
+                            return True
+            else:
+                error_msg = reactions_response.get('error', 'Unknown error')
+                if error_msg == 'missing_scope':
+                    logger.error(f"Cannot check reactions - missing 'reactions:read' scope. Please add this scope to your Slack app.")
+                else:
+                    logger.warning(f"Failed to get reactions for message {message_ts}: {error_msg}")
+                    
+        except Exception as reaction_error:
+            if 'missing_scope' in str(reaction_error):
+                logger.error(f"Cannot check reactions - missing 'reactions:read' scope: {reaction_error}")
+            else:
+                logger.error(f"Error checking reactions for message {message_ts}: {reaction_error}")
         
         # Also check for thread replies from the bot
-        replies_response = slack.conversations_replies(channel=channel, ts=message_ts)
-        
-        if replies_response.get("ok"):
-            messages = replies_response.get("messages", [])
-            bot_user_id = get_bot_user_id()
+        try:
+            replies_response = slack.conversations_replies(channel=channel, ts=message_ts)
             
-            # Skip the original message (first in the list) and check for bot replies
-            for message in messages[1:]:
-                if message.get("user") == bot_user_id:
-                    logger.info(f"Message {message_ts} already has bot thread reply")
-                    return True
+            if replies_response.get("ok"):
+                messages = replies_response.get("messages", [])
+                bot_user_id = get_bot_user_id()
+                
+                # Skip the original message (first in the list) and check for bot replies
+                for message in messages[1:]:
+                    if message.get("user") == bot_user_id:
+                        logger.info(f"Message {message_ts} already has bot thread reply")
+                        return True
+            else:
+                logger.warning(f"Failed to get thread replies for message {message_ts}: {replies_response.get('error', 'Unknown error')}")
+                
+        except Exception as thread_error:
+            logger.error(f"Error checking thread replies for message {message_ts}: {thread_error}")
         
         return False
         
@@ -907,10 +957,23 @@ def send_threaded_response_with_reaction(channel, thread_ts, response_text, user
                 if reaction_response.get("ok"):
                     logger.info(f"Green tick reaction added to message {thread_ts}")
                 else:
-                    logger.warning(f"Failed to add reaction: {reaction_response.get('error', 'Unknown error')}")
+                    error_msg = reaction_response.get('error', 'Unknown error')
+                    if error_msg == 'missing_scope':
+                        logger.error(f"Cannot add reaction - missing 'reactions:write' scope. Please add this scope to your Slack app.")
+                    elif error_msg == 'already_reacted':
+                        logger.debug(f"Reaction already exists on message {thread_ts}")
+                    elif error_msg == 'no_reaction':
+                        logger.warning(f"Invalid reaction name 'white_check_mark' for message {thread_ts}")
+                    else:
+                        logger.warning(f"Failed to add reaction to message {thread_ts}: {error_msg}")
                     
             except Exception as reaction_error:
-                logger.error(f"Error adding reaction: {reaction_error}")
+                if 'missing_scope' in str(reaction_error):
+                    logger.error(f"Cannot add reaction - missing 'reactions:write' scope: {reaction_error}")
+                elif 'already_reacted' in str(reaction_error):
+                    logger.debug(f"Reaction already exists on message {thread_ts}: {reaction_error}")
+                else:
+                    logger.error(f"Error adding reaction to message {thread_ts}: {reaction_error}")
             
             return True
         else:
