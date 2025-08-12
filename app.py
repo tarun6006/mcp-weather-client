@@ -874,33 +874,52 @@ def check_message_already_processed(channel, message_ts):
     """Check if a message already has bot response (thread reply + green tick reaction)"""
     try:
         # Check for existing reactions on the message
-        reactions_response = slack.reactions_get(channel=channel, timestamp=message_ts)
-        
-        if reactions_response.get("ok"):
-            message_data = reactions_response.get("message", {})
-            reactions = message_data.get("reactions", [])
+        try:
+            reactions_response = slack.reactions_get(channel=channel, timestamp=message_ts)
             
-            # Check if green tick reaction exists from the bot
-            bot_user_id = get_bot_user_id()
-            for reaction in reactions:
-                if reaction.get("name") == "white_check_mark":  # Green tick emoji name in Slack
-                    users = reaction.get("users", [])
-                    if bot_user_id in users:
-                        logger.info(f"Message {message_ts} already processed (has bot's green tick reaction)")
-                        return True
+            if reactions_response.get("ok"):
+                message_data = reactions_response.get("message", {})
+                reactions = message_data.get("reactions", [])
+                
+                # Check if green tick reaction exists from the bot
+                bot_user_id = get_bot_user_id()
+                for reaction in reactions:
+                    if reaction.get("name") == "white_check_mark":  # Green tick emoji name in Slack
+                        users = reaction.get("users", [])
+                        if bot_user_id in users:
+                            logger.info(f"Message {message_ts} already processed (has bot's green tick reaction)")
+                            return True
+            else:
+                error_msg = reactions_response.get('error', 'Unknown error')
+                if error_msg == 'missing_scope':
+                    logger.error(f"Cannot check reactions - missing 'reactions:read' scope. Please add this scope to your Slack app.")
+                else:
+                    logger.warning(f"Failed to get reactions for message {message_ts}: {error_msg}")
+                    
+        except Exception as reaction_error:
+            if 'missing_scope' in str(reaction_error):
+                logger.error(f"Cannot check reactions - missing 'reactions:read' scope: {reaction_error}")
+            else:
+                logger.error(f"Error checking reactions for message {message_ts}: {reaction_error}")
         
         # Also check for thread replies from the bot
-        replies_response = slack.conversations_replies(channel=channel, ts=message_ts)
-        
-        if replies_response.get("ok"):
-            messages = replies_response.get("messages", [])
-            bot_user_id = get_bot_user_id()
+        try:
+            replies_response = slack.conversations_replies(channel=channel, ts=message_ts)
             
-            # Skip the original message (first in the list) and check for bot replies
-            for message in messages[1:]:
-                if message.get("user") == bot_user_id:
-                    logger.info(f"Message {message_ts} already has bot thread reply")
-                    return True
+            if replies_response.get("ok"):
+                messages = replies_response.get("messages", [])
+                bot_user_id = get_bot_user_id()
+                
+                # Skip the original message (first in the list) and check for bot replies
+                for message in messages[1:]:
+                    if message.get("user") == bot_user_id:
+                        logger.info(f"Message {message_ts} already has bot thread reply")
+                        return True
+            else:
+                logger.warning(f"Failed to get thread replies for message {message_ts}: {replies_response.get('error', 'Unknown error')}")
+                
+        except Exception as thread_error:
+            logger.error(f"Error checking thread replies for message {message_ts}: {thread_error}")
         
         return False
         
@@ -938,10 +957,23 @@ def send_threaded_response_with_reaction(channel, thread_ts, response_text, user
                 if reaction_response.get("ok"):
                     logger.info(f"Green tick reaction added to message {thread_ts}")
                 else:
-                    logger.warning(f"Failed to add reaction: {reaction_response.get('error', 'Unknown error')}")
+                    error_msg = reaction_response.get('error', 'Unknown error')
+                    if error_msg == 'missing_scope':
+                        logger.error(f"Cannot add reaction - missing 'reactions:write' scope. Please add this scope to your Slack app.")
+                    elif error_msg == 'already_reacted':
+                        logger.debug(f"Reaction already exists on message {thread_ts}")
+                    elif error_msg == 'no_reaction':
+                        logger.warning(f"Invalid reaction name 'white_check_mark' for message {thread_ts}")
+                    else:
+                        logger.warning(f"Failed to add reaction to message {thread_ts}: {error_msg}")
                     
             except Exception as reaction_error:
-                logger.error(f"Error adding reaction: {reaction_error}")
+                if 'missing_scope' in str(reaction_error):
+                    logger.error(f"Cannot add reaction - missing 'reactions:write' scope: {reaction_error}")
+                elif 'already_reacted' in str(reaction_error):
+                    logger.debug(f"Reaction already exists on message {thread_ts}: {reaction_error}")
+                else:
+                    logger.error(f"Error adding reaction to message {thread_ts}: {reaction_error}")
             
             return True
         else:
