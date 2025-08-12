@@ -811,7 +811,46 @@ Only respond with the JSON object, nothing else."""
                 if fallback_location:
                     tool_result = self._call_mcp_tool("get_weather", fallback_location)
                     return self._format_response(tool_result, "get_weather", fallback_location, user_input)
-                return "I had trouble processing your request. Please ask for weather information for a US city/zip code or a mathematical calculation."
+                # Try pattern matching as final fallback before giving up
+                user_lower = user_input.lower()
+                pattern_config = CONFIG.get('client_messages', {}).get('pattern_matching', {})
+                
+                # Check for obvious math patterns
+                math_patterns = pattern_config.get('math_patterns', ['calculate', 'what is', '+', '-', '*', '/'])
+                if any(pattern in user_lower for pattern in math_patterns):
+                    # Extract the math expression (remove bot mention and common prefixes)
+                    math_expression = user_input
+                    # Remove bot mention
+                    if '<@' in math_expression:
+                        math_expression = ' '.join([word for word in math_expression.split() if not word.startswith('<@')])
+                    # Remove common prefixes
+                    prefixes = pattern_config.get('cleanup_prefixes', ['hey', 'what is'])
+                    for prefix in prefixes:
+                        if math_expression.lower().startswith(prefix):
+                            math_expression = math_expression[len(prefix):].strip()
+                    
+                    logger.info(f"Using pattern matching fallback for math after JSON parse failure: '{math_expression}'")
+                    tool_result = self._call_mcp_tool('parse_expression', {'expression': math_expression.strip()})
+                    return self._format_response(tool_result, "parse_expression", {'expression': math_expression.strip()}, user_input)
+                
+                # Check for weather patterns
+                weather_patterns = pattern_config.get('weather_patterns', ['weather'])
+                if any(pattern in user_lower for pattern in weather_patterns):
+                    # Try to extract city name (basic pattern)
+                    words = user_input.split()
+                    # Look for words that might be cities (after common words)
+                    skip_words = pattern_config.get('skip_words', ['hey', 'weather', 'bot'])
+                    for word in words:
+                        clean_word = word.strip('.,?!').replace('<@', '').replace('>', '')
+                        if len(clean_word) > 2 and clean_word.lower() not in skip_words and not clean_word.startswith('U'):
+                            logger.info(f"Using pattern matching fallback for weather after JSON parse failure: '{clean_word}'")
+                            tool_result = self._call_mcp_tool('get_weather', {'city': clean_word})
+                            return self._format_response(tool_result, "get_weather", {'city': clean_word}, user_input)
+                
+                # Use configured error message
+                error_msg = self.error_messages.get('processing_error', 
+                    "I had trouble processing your request. Please ask for weather information for a US city/zip code or a mathematical calculation.")
+                return error_msg
                 
         except Exception as e:
             error_msg = str(e)
@@ -1490,6 +1529,110 @@ def slack_events():
     
     # Always return 200 to acknowledge receipt
     return "", 200
+
+# @app.route("/test", methods=["POST", "GET"])
+# def test_weather():
+#     """
+#     Test endpoint that supports both natural language and direct tool calls
+#     
+#     POST /test with JSON:
+#     - {"text": "What's the weather in Miami?"} - Natural language
+#     - {"city": "Miami"} - Direct city call
+#     - {"zip_code": "33101"} - Direct ZIP code call
+#     
+#     GET /test - Returns endpoint info
+#     """
+#     
+#     if request.method == "GET":
+#         return jsonify({
+#             "endpoint": "/test",
+#             "methods": ["GET", "POST"],
+#             "description": "Test MCP Weather Bot functionality",
+#             "examples": {
+#                 "natural_language": {"text": "What's the weather in Miami?"},
+#                 "direct_city": {"city": "Miami"},
+#                 "direct_zip": {"zip_code": "33101"}
+#             },
+#             "mcp_server_url": MCP_SERVER_URL,
+#             "gemini_model": GEMINI_MODEL,
+#             "status": "ready"
+#         }), 200
+#     
+#     # Handle POST requests
+#     try:
+#         data = request.get_json()
+#         
+#         if not data:
+#             return jsonify({
+#                 "error": "No JSON data provided",
+#                 "usage": "Send JSON with 'text', 'city', or 'zip_code' parameter"
+#             }), 400
+#         
+#         print(f"Test endpoint called with: {data}")
+#         
+#         # Support multiple input formats
+#         if "text" in data:
+#             # Natural language processing via Gemini + MCP
+#             user_text = data["text"]
+#             print(f"Processing natural language: '{user_text}'")
+#             resp = client.send({"text": user_text})
+#             
+#         elif "city" in data:
+#             # Direct city tool call (bypass Gemini)
+#             city = data["city"]
+#             print(f"Direct city call: '{city}'")
+#             resp = client.send({"tool": "get_weather", "args": {"city": city}})
+#             
+#         elif "zip_code" in data:
+#             # Direct ZIP code tool call (bypass Gemini)
+#             zip_code = data["zip_code"]
+#             print(f"Direct ZIP call: '{zip_code}'")
+#             resp = client.send({"tool": "get_weather", "args": {"zip_code": zip_code}})
+#             
+#         else:
+#             return jsonify({
+#                 "error": "Invalid request format",
+#                 "required": "One of: 'text', 'city', or 'zip_code'",
+#                 "examples": {
+#                     "natural_language": {"text": "weather in Phoenix"},
+#                     "direct_city": {"city": "Phoenix"},
+#                     "direct_zip": {"zip_code": "85044"}
+#                 }
+#             }), 400
+#         
+#         # Process response
+#         if not resp:
+#             return jsonify({"error": "No response from MCP client"}), 500
+#             
+#         content = resp.get("tool_result", {}).get("content", [])
+#         
+#         # Extract text from the first content item
+#         if content and len(content) > 0:
+#             result = content[0].get("text", "No weather data received")
+#             print(f"Response: {result}")
+#             
+#             return jsonify({
+#                 "success": True,
+#                 "response": result,
+#                 "request": data,
+#                 "timestamp": time.time()
+#             }), 200
+#         else:
+#             print("No content in MCP response")
+#             return jsonify({
+#                 "error": "No content received from MCP client",
+#                 "response_data": resp
+#             }), 500
+#             
+#     except RequestException as e:
+#         error_msg = f"Network error connecting to MCP server: {str(e)}"
+#         print(f"{error_msg}")
+#         return jsonify({"error": error_msg}), 503
+#         
+#     except Exception as e:
+#         error_msg = f"Internal error: {str(e)}"
+#         print(f"{error_msg}")
+#         return jsonify({"error": error_msg}), 500
 
 @app.route("/health", methods=["GET"])
 def health_check():
