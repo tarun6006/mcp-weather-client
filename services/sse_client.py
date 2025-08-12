@@ -89,11 +89,15 @@ class SSECalculatorClient:
         request_data["id"] = request_id
         
         try:
-            # Send request to SSE MCP endpoint
+            # Send request to SSE MCP endpoint with client ID
+            headers = {
+                "Content-Type": "application/json",
+                "X-Client-ID": self.client_id
+            }
             response = requests.post(
                 self.mcp_url,
                 json=request_data,
-                headers={"Content-Type": "application/json"},
+                headers=headers,
                 timeout=10
             )
             response.raise_for_status()
@@ -115,6 +119,40 @@ class SSECalculatorClient:
         except Exception as e:
             logger.error(f"Failed to send SSE request: {e}")
             return None
+    
+    def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> str:
+        """Call a calculator tool via SSE"""
+        request_data = {
+            "jsonrpc": "2.0",
+            "method": "tools/call",
+            "params": {
+                "name": tool_name,
+                "arguments": arguments
+            }
+        }
+        
+        logger.debug(f"Calling calculator tool {tool_name} via SSE with args: {arguments}")
+        
+        response = self.send_request(request_data)
+        
+        if response is None:
+            error_msg = f"SSE request failed for tool {tool_name}"
+            logger.error(error_msg)
+            return error_msg
+        
+        if "error" in response:
+            error_msg = f"Calculator tool error: {response['error'].get('message', 'Unknown error')}"
+            logger.error(error_msg)
+            return error_msg
+        
+        # Extract the result content
+        result = response.get("result", {})
+        if isinstance(result, dict) and "content" in result:
+            content = result["content"]
+            if isinstance(content, list) and len(content) > 0:
+                return content[0].get("text", "No result")
+        
+        return str(result) if result else "No result"
     
     def disconnect(self):
         """Disconnect from SSE server"""
