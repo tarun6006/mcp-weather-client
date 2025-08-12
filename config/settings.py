@@ -37,7 +37,13 @@ WEATHER_MCP_PATH = os.getenv("WEATHER_MCP_PATH", "/mcp")
 WEATHER_MCP_URL = f"{WEATHER_MCP_PROTOCOL}://{WEATHER_MCP_HOST}:{WEATHER_MCP_PORT}{WEATHER_MCP_PATH}"
 
 # Calculator MCP Server Configuration
-CALC_MCP_HOST = os.getenv("CALC_MCP_HOST", "localhost")
+# Get calculator host and clean it if it includes protocol
+_calc_host_raw = os.getenv("CALC_MCP_HOST", "localhost")
+# Remove protocol if present (e.g., "https://example.com" -> "example.com")
+if "://" in _calc_host_raw:
+    CALC_MCP_HOST = _calc_host_raw.split("://", 1)[1]
+else:
+    CALC_MCP_HOST = _calc_host_raw
 CALC_MCP_PORT = int(os.getenv("CALC_MCP_PORT", "5003"))
 CALC_MCP_PROTOCOL = os.getenv("CALC_MCP_PROTOCOL", "http")
 CALC_MCP_PATH = os.getenv("CALC_MCP_PATH", "/mcp")
