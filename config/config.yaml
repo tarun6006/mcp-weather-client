@@ -566,3 +566,16 @@ location_extraction:
     - name: "simple_location"
       pattern: '(?:^|\s)(?:in|at|for|to)\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)'
       description: "Simple 'in Baltimore' or 'at Miami'"
+
+# Timeout Configuration
+timeout_config:
+  # SSE (Server-Sent Events) timeouts for calculator server
+  sse_connection_timeout: 30    # Timeout for establishing SSE connection (seconds)
+  sse_request_timeout: 30       # Timeout for HTTP requests to SSE endpoints (seconds)
+  sse_response_timeout: 30      # Timeout for waiting for SSE responses (seconds)
+  
+  # HTTP timeouts for weather server
+  http_request_timeout: 15      # Timeout for HTTP requests to weather server (seconds)
+  
+  # General timeouts
+  gemini_request_timeout: 30    # Timeout for Gemini API requests (seconds)
