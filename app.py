@@ -412,6 +412,51 @@ class GeminiMCPClient:
         self.tool_categories = self.client_messages.get('tool_categories', {})
         self.calculator_tools = self.tool_categories.get('all_calculator_tools', [])
     
+    def _call_calculator_direct_fallback(self, tool_name, arguments):
+        """Fallback: Call calculator server using direct MCP endpoint when SSE fails"""
+        self.request_id += 1
+        
+        # Build calculator MCP URL
+        port_str = f":{self.calc_server_port}" if str(self.calc_server_port) not in ["80", "443"] else ""
+        calc_mcp_url = f"{self.calc_server_protocol}://{self.calc_server_host}{port_str}/mcp"
+        
+        payload = {
+            "jsonrpc": "2.0",
+            "id": str(self.request_id),
+            "method": "tools/call",
+            "params": {
+                "name": tool_name,
+                "arguments": arguments
+            }
+        }
+        
+        try:
+            logger.info(f"Using direct MCP fallback for calculator tool: {tool_name}")
+            response = requests.post(
+                calc_mcp_url,
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=HTTP_REQUEST_TIMEOUT
+            )
+            response.raise_for_status()
+            
+            result_data = response.json()
+            if "result" in result_data:
+                result = result_data["result"]
+                if isinstance(result, dict) and "result" in result:
+                    # For calculator results like {"result": {"result": 5}}
+                    return str(result["result"])
+                else:
+                    return str(result)
+            elif "error" in result_data:
+                return f"Error: {result_data['error']['message']}"
+            else:
+                return "Unknown error occurred"
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Calculator direct MCP fallback failed: {e}")
+            return f"Error: Calculator server error: {str(e)}"
+    
     def _call_mcp_tool(self, tool_name, arguments):
         """Make direct call to appropriate MCP server based on tool"""
         self.request_id += 1
@@ -421,9 +466,19 @@ class GeminiMCPClient:
         server_type = tool_info.get("server", "weather")
         
         if server_type == "calculator":
-            # Use SSE for calculator tools
+            # Try SSE first, fallback to direct MCP if SSE fails
             logger.debug(f"Calling {tool_name} via SSE on calculator server")
-            return self.calc_sse_client.call_tool(tool_name, arguments)
+            sse_result = self.calc_sse_client.call_tool(tool_name, arguments)
+            
+            # Check if SSE failed (timeout or error)
+            if isinstance(sse_result, str) and ("Timeout waiting for SSE response" in sse_result or 
+                                               "Error calling calculator SSE server" in sse_result or
+                                               "Error: Not connected to calculator SSE server" in sse_result):
+                logger.warning(f"SSE failed for {tool_name}: {sse_result}")
+                logger.info(f"Attempting direct MCP fallback for {tool_name}")
+                return self._call_calculator_direct_fallback(tool_name, arguments)
+            
+            return sse_result
         else:
             # Use HTTP for weather tools
             server_url = self.weather_server_url
