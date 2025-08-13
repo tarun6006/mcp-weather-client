@@ -135,6 +135,20 @@ CALC_MCP_PATH = os.getenv("CALC_MCP_PATH", "/mcp")
 
 CALC_MCP_URL = f"{CALC_MCP_PROTOCOL}://{CALC_MCP_HOST}:{CALC_MCP_PORT}{CALC_MCP_PATH}"
 
+# Timeout Configuration from config.yaml
+TIMEOUT_CONFIG = CONFIG.get('timeout_config', {})
+SSE_CONNECTION_TIMEOUT = TIMEOUT_CONFIG.get('sse_connection_timeout', 30)
+SSE_REQUEST_TIMEOUT = TIMEOUT_CONFIG.get('sse_request_timeout', 30)
+SSE_RESPONSE_TIMEOUT = TIMEOUT_CONFIG.get('sse_response_timeout', 30)
+HTTP_REQUEST_TIMEOUT = TIMEOUT_CONFIG.get('http_request_timeout', 15)
+GEMINI_REQUEST_TIMEOUT = TIMEOUT_CONFIG.get('gemini_request_timeout', 30)
+
+# Application Configuration
+MESSAGE_EXPIRY_SECONDS = 300  # 5 minutes
+MIN_REQUEST_INTERVAL = 3      # 3 seconds between requests per user
+MAX_PROCESSED_MESSAGES = 1000 # Maximum messages to keep in memory
+GREEN_TICK_EMOJI = "white_check_mark"
+
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
 
@@ -151,6 +165,12 @@ logger.info(f"  Port: {CALC_MCP_PORT}")
 logger.info(f"  Protocol: {CALC_MCP_PROTOCOL}")
 logger.info(f"  Path: {CALC_MCP_PATH}")
 logger.info(f"  Full URL: {CALC_MCP_URL}")
+logger.info("Timeout Configuration:")
+logger.info(f"  SSE Connection: {SSE_CONNECTION_TIMEOUT}s")
+logger.info(f"  SSE Request: {SSE_REQUEST_TIMEOUT}s") 
+logger.info(f"  SSE Response: {SSE_RESPONSE_TIMEOUT}s")
+logger.info(f"  HTTP Request: {HTTP_REQUEST_TIMEOUT}s")
+logger.info(f"  Gemini Request: {GEMINI_REQUEST_TIMEOUT}s")
 
 logger.info("Gemini Configuration:")
 logger.info(f"  Model: {GEMINI_MODEL}")
@@ -307,12 +327,12 @@ class SSECalculatorClient:
                     "Content-Type": "application/json",
                     "X-Client-ID": self.client_id
                 },
-                timeout=10
+                timeout=SSE_REQUEST_TIMEOUT
             )
             response.raise_for_status()
             
-            # Wait for event (no CPU polling!) - reduced timeout for faster failures
-            if event.wait(timeout=10):
+            # Wait for event (no CPU polling!) - configurable timeout for SSE responses
+            if event.wait(timeout=SSE_RESPONSE_TIMEOUT):
                 with self.lock:
                     response_data = self.response_data.pop(request_id, None)
                     self.response_events.pop(request_id, None)
@@ -342,7 +362,7 @@ class SSECalculatorClient:
                 with self.lock:
                     self.response_events.pop(request_id, None)
                     self.response_data.pop(request_id, None)
-                return "Error: Timeout waiting for SSE response (10s)"
+                return f"Error: Timeout waiting for SSE response ({SSE_RESPONSE_TIMEOUT}s)"
             
         except requests.exceptions.ConnectionError:
             # Cleanup on error

@@ -24,10 +24,10 @@ steps:
       - '--concurrency=1000'
       - '--timeout=300'
       - '--set-env-vars=LOG_LEVEL=INFO'
-      - '--set-env-vars=WEATHER_MCP_HOST=weather-mcp-server-[hash]-uc.a.run.app'
+      - '--set-env-vars=WEATHER_MCP_HOST=mcp-weather-server-876452898662.us-west1.run.app'
       - '--set-env-vars=WEATHER_MCP_PORT=443'
       - '--set-env-vars=WEATHER_MCP_PROTOCOL=https'
-      - '--set-env-vars=CALC_MCP_HOST=calculator-mcp-server-[hash]-uc.a.run.app'
+      - '--set-env-vars=CALC_MCP_HOST=calc-mcp-server-876452898662.us-west1.run.app'
       - '--set-env-vars=CALC_MCP_PORT=443'
       - '--set-env-vars=CALC_MCP_PROTOCOL=https'
       # Note: Add your actual secrets for production deployment
