@@ -7,6 +7,24 @@ import threading
 import logging
 import sseclient
 from typing import Dict, Any, Optional
+import os
+import yaml
+
+def load_config():
+    """Load configuration from YAML file"""
+    config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'config.yaml')
+    try:
+        with open(config_path, 'r', encoding='utf-8') as file:
+            return yaml.safe_load(file)
+    except FileNotFoundError:
+        return {}
+    except yaml.YAMLError:
+        return {}
+
+CONFIG = load_config()
+TIMEOUT_CONFIG = CONFIG.get('timeout_config', {})
+SSE_CONNECTION_TIMEOUT = TIMEOUT_CONFIG.get('sse_connection_timeout', 30)
+SSE_REQUEST_TIMEOUT = TIMEOUT_CONFIG.get('sse_request_timeout', 30)
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +117,7 @@ class SSECalculatorClient:
                 self.mcp_url,
                 json=request_data,
                 headers=headers,
-                timeout=30
+                timeout=SSE_REQUEST_TIMEOUT
             )
             response.raise_for_status()
             
