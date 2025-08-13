@@ -38,7 +38,6 @@ WEATHER_MCP_URL = f"{WEATHER_MCP_PROTOCOL}://{WEATHER_MCP_HOST}:{WEATHER_MCP_POR
 
 # Calculator MCP Server Configuration
 # Get calculator host and clean it if it includes protocol
-#Host Fix
 _calc_host_raw = os.getenv("CALC_MCP_HOST", "localhost")
 # Remove protocol if present (e.g., "https://example.com" -> "example.com")
 if "://" in _calc_host_raw:
@@ -60,6 +59,14 @@ MIN_REQUEST_INTERVAL = 3      # 3 seconds between requests per user
 MAX_PROCESSED_MESSAGES = 1000 # Maximum messages to keep in memory
 GREEN_TICK_EMOJI = "white_check_mark"
 
+# Timeout Configuration from config.yaml
+TIMEOUT_CONFIG = CONFIG.get('timeout_config', {})
+SSE_CONNECTION_TIMEOUT = TIMEOUT_CONFIG.get('sse_connection_timeout', 30)
+SSE_REQUEST_TIMEOUT = TIMEOUT_CONFIG.get('sse_request_timeout', 30)
+SSE_RESPONSE_TIMEOUT = TIMEOUT_CONFIG.get('sse_response_timeout', 30)
+HTTP_REQUEST_TIMEOUT = TIMEOUT_CONFIG.get('http_request_timeout', 15)
+GEMINI_REQUEST_TIMEOUT = TIMEOUT_CONFIG.get('gemini_request_timeout', 30)
+
 def log_configuration():
     """Log configuration information"""
     logger.info("MCP Server Configuration:")
@@ -75,5 +82,11 @@ def log_configuration():
     logger.info(f"  Protocol: {CALC_MCP_PROTOCOL}")
     logger.info(f"  Path: {CALC_MCP_PATH}")
     logger.info(f"  Full URL: {CALC_MCP_URL}")
+    logger.info("Timeout Configuration:")
+    logger.info(f"  SSE Connection: {SSE_CONNECTION_TIMEOUT}s")
+    logger.info(f"  SSE Request: {SSE_REQUEST_TIMEOUT}s") 
+    logger.info(f"  SSE Response: {SSE_RESPONSE_TIMEOUT}s")
+    logger.info(f"  HTTP Request: {HTTP_REQUEST_TIMEOUT}s")
+    logger.info(f"  Gemini Request: {GEMINI_REQUEST_TIMEOUT}s")
     logger.info("Gemini Configuration:")
     logger.info(f"  Model: {GEMINI_MODEL}")
