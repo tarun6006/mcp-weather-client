@@ -113,27 +113,74 @@ load_dotenv()
 SLACK_SECRET = os.getenv("SLACK_SIGNING_SECRET")
 SLACK_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 
-# Weather MCP Server Configuration
-WEATHER_MCP_HOST = os.getenv("WEATHER_MCP_HOST", "localhost")
-WEATHER_MCP_PORT = int(os.getenv("WEATHER_MCP_PORT", "5001"))
-WEATHER_MCP_PROTOCOL = os.getenv("WEATHER_MCP_PROTOCOL", "http")
+# Environment Detection and MCP Server Configuration
+def detect_environment():
+    """Detect if running in local development or cloud environment"""
+    # Check for Google Cloud Run environment
+    is_cloud_run = os.environ.get("K_SERVICE") is not None
+    # Check for explicit environment setting
+    env_mode = os.environ.get("ENVIRONMENT", "").lower()
+    
+    if env_mode == "local":
+        return "local"
+    elif env_mode == "cloud" or is_cloud_run:
+        return "cloud"
+    else:
+        # Auto-detect: if no explicit cloud environment vars, assume local
+        return "local" if not is_cloud_run else "cloud"
+
+ENVIRONMENT = detect_environment()
+logger.info(f"Detected environment: {ENVIRONMENT}")
+
+# Weather MCP Server Configuration with environment-aware defaults
+if ENVIRONMENT == "local":
+    WEATHER_MCP_HOST_DEFAULT = "localhost"
+    WEATHER_MCP_PORT_DEFAULT = "5001"
+    WEATHER_MCP_PROTOCOL_DEFAULT = "http"
+else:
+    # Cloud defaults - can be overridden by environment variables
+    WEATHER_MCP_HOST_DEFAULT = "mcp-weather-server-876452898662.us-west1.run.app"
+    WEATHER_MCP_PORT_DEFAULT = "443"
+    WEATHER_MCP_PROTOCOL_DEFAULT = "https"
+
+WEATHER_MCP_HOST = os.getenv("WEATHER_MCP_HOST", WEATHER_MCP_HOST_DEFAULT)
+WEATHER_MCP_PORT = int(os.getenv("WEATHER_MCP_PORT", WEATHER_MCP_PORT_DEFAULT))
+WEATHER_MCP_PROTOCOL = os.getenv("WEATHER_MCP_PROTOCOL", WEATHER_MCP_PROTOCOL_DEFAULT)
 WEATHER_MCP_PATH = os.getenv("WEATHER_MCP_PATH", "/mcp")
 
-WEATHER_MCP_URL = f"{WEATHER_MCP_PROTOCOL}://{WEATHER_MCP_HOST}:{WEATHER_MCP_PORT}{WEATHER_MCP_PATH}"
+# Handle port in URL construction for cloud services
+if WEATHER_MCP_PORT in [80, 443]:
+    WEATHER_MCP_URL = f"{WEATHER_MCP_PROTOCOL}://{WEATHER_MCP_HOST}{WEATHER_MCP_PATH}"
+else:
+    WEATHER_MCP_URL = f"{WEATHER_MCP_PROTOCOL}://{WEATHER_MCP_HOST}:{WEATHER_MCP_PORT}{WEATHER_MCP_PATH}"
 
-# Calculator MCP Server Configuration
+# Calculator MCP Server Configuration with environment-aware defaults
+if ENVIRONMENT == "local":
+    CALC_MCP_HOST_DEFAULT = "localhost"
+    CALC_MCP_PORT_DEFAULT = "5003"
+    CALC_MCP_PROTOCOL_DEFAULT = "http"
+else:
+    # Cloud defaults - can be overridden by environment variables
+    CALC_MCP_HOST_DEFAULT = "calc-mcp-server-876452898662.us-west1.run.app"
+    CALC_MCP_PORT_DEFAULT = "443"
+    CALC_MCP_PROTOCOL_DEFAULT = "https"
+
 # Get calculator host and clean it if it includes protocol
-_calc_host_raw = os.getenv("CALC_MCP_HOST", "localhost")
+_calc_host_raw = os.getenv("CALC_MCP_HOST", CALC_MCP_HOST_DEFAULT)
 # Remove protocol if present (e.g., "https://example.com" -> "example.com")
 if "://" in _calc_host_raw:
     CALC_MCP_HOST = _calc_host_raw.split("://", 1)[1]
 else:
     CALC_MCP_HOST = _calc_host_raw
-CALC_MCP_PORT = int(os.getenv("CALC_MCP_PORT", "5003"))
-CALC_MCP_PROTOCOL = os.getenv("CALC_MCP_PROTOCOL", "http")
+CALC_MCP_PORT = int(os.getenv("CALC_MCP_PORT", CALC_MCP_PORT_DEFAULT))
+CALC_MCP_PROTOCOL = os.getenv("CALC_MCP_PROTOCOL", CALC_MCP_PROTOCOL_DEFAULT)
 CALC_MCP_PATH = os.getenv("CALC_MCP_PATH", "/mcp")
 
-CALC_MCP_URL = f"{CALC_MCP_PROTOCOL}://{CALC_MCP_HOST}:{CALC_MCP_PORT}{CALC_MCP_PATH}"
+# Handle port in URL construction for cloud services
+if CALC_MCP_PORT in [80, 443]:
+    CALC_MCP_URL = f"{CALC_MCP_PROTOCOL}://{CALC_MCP_HOST}{CALC_MCP_PATH}"
+else:
+    CALC_MCP_URL = f"{CALC_MCP_PROTOCOL}://{CALC_MCP_HOST}:{CALC_MCP_PORT}{CALC_MCP_PATH}"
 
 # Timeout Configuration from config.yaml
 TIMEOUT_CONFIG = CONFIG.get('timeout_config', {})
@@ -153,6 +200,7 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
 
 logger.info("MCP Server Configuration:")
+logger.info(f"Environment: {ENVIRONMENT}")
 logger.info("Weather MCP Server:")
 logger.info(f"  Host: {WEATHER_MCP_HOST}")
 logger.info(f"  Port: {WEATHER_MCP_PORT}")
@@ -617,13 +665,81 @@ class GeminiMCPClient:
             
             return f"Weather update for {requested_location}: {tool_result}"
             
-        elif tool_name in ["add", "subtract", "multiply", "divide", "power"]:
+        elif tool_name in ["add", "subtract", "multiply", "divide", "power", "sqrt", "factorial", "modulo", "absolute", "parse_expression"]:
             # Calculator response formatting
             if "error" in tool_result.lower():
                 return f"I encountered an error with the calculation: {tool_result}"
             
-            # The calculator server already provides nicely formatted results like "16384 + 86413 = 102797"
-            return f"Here's the calculation result: {tool_result}"
+            # Create more conversational responses based on the tool and arguments
+            operation_descriptions = {
+                "add": "addition",
+                "subtract": "subtraction", 
+                "multiply": "multiplication",
+                "divide": "division",
+                "power": "exponentiation",
+                "sqrt": "square root",
+                "factorial": "factorial",
+                "modulo": "modulo operation",
+                "absolute": "absolute value",
+                "parse_expression": "calculation"
+            }
+            
+            operation = operation_descriptions.get(tool_name, "calculation")
+            
+            # Extract numbers from arguments for better context
+            if tool_name == "add" and "numbers" in arguments:
+                numbers = arguments["numbers"]
+                if len(numbers) == 2:
+                    return f"You asked me to calculate the {operation} of {numbers[0]} and {numbers[1]}. The result is {tool_result}."
+                else:
+                    numbers_str = ", ".join(str(n) for n in numbers[:-1]) + f", and {numbers[-1]}"
+                    return f"You asked me to calculate the {operation} of {numbers_str}. The result is {tool_result}."
+            elif tool_name == "subtract" and "minuend" in arguments and "subtrahends" in arguments:
+                minuend = arguments["minuend"]
+                subtrahends = arguments["subtrahends"]
+                if len(subtrahends) == 1:
+                    return f"You asked me to calculate the {operation} of {minuend} and {subtrahends[0]}. The result is {tool_result}."
+                else:
+                    sub_str = ", ".join(str(n) for n in subtrahends[:-1]) + f", and {subtrahends[-1]}"
+                    return f"You asked me to subtract {sub_str} from {minuend}. The result is {tool_result}."
+            elif tool_name == "multiply" and "numbers" in arguments:
+                numbers = arguments["numbers"]
+                if len(numbers) == 2:
+                    return f"You asked me to calculate the {operation} of {numbers[0]} and {numbers[1]}. The result is {tool_result}."
+                else:
+                    numbers_str = ", ".join(str(n) for n in numbers[:-1]) + f", and {numbers[-1]}"
+                    return f"You asked me to calculate the {operation} of {numbers_str}. The result is {tool_result}."
+            elif tool_name == "divide" and "dividend" in arguments and "divisors" in arguments:
+                dividend = arguments["dividend"]
+                divisors = arguments["divisors"]
+                if len(divisors) == 1:
+                    return f"You asked me to calculate the {operation} of {dividend} by {divisors[0]}. The result is {tool_result}."
+                else:
+                    div_str = ", ".join(str(n) for n in divisors[:-1]) + f", and {divisors[-1]}"
+                    return f"You asked me to divide {dividend} by {div_str}. The result is {tool_result}."
+            elif tool_name == "power" and "base" in arguments and "exponent" in arguments:
+                base = arguments["base"]
+                exponent = arguments["exponent"]
+                return f"You asked me to calculate {base} raised to the power of {exponent}. The result is {tool_result}."
+            elif tool_name == "sqrt" and "number" in arguments:
+                number = arguments["number"]
+                return f"You asked me to calculate the {operation} of {number}. The result is {tool_result}."
+            elif tool_name == "factorial" and "number" in arguments:
+                number = arguments["number"]
+                return f"You asked me to calculate the {operation} of {number}. The result is {tool_result}."
+            elif tool_name == "modulo" and "dividend" in arguments and "divisor" in arguments:
+                dividend = arguments["dividend"]
+                divisor = arguments["divisor"]
+                return f"You asked me to calculate {dividend} modulo {divisor}. The result is {tool_result}."
+            elif tool_name == "absolute" and "number" in arguments:
+                number = arguments["number"]
+                return f"You asked me to calculate the {operation} of {number}. The result is {tool_result}."
+            elif tool_name == "parse_expression" and "expression" in arguments:
+                expression = arguments["expression"]
+                return f"You asked me to calculate '{expression}'. The result is {tool_result}."
+            
+            # Fallback for other calculator tools or unexpected formats
+            return f"You asked me to perform a {operation}. The result is {tool_result}."
             
         else:
             # Generic response formatting
@@ -638,6 +754,35 @@ class GeminiMCPClient:
             if fallback_location:
                 tool_result = self._call_mcp_tool("get_weather", fallback_location)
                 return self._format_response(tool_result, "get_weather", fallback_location, user_input)
+            
+            # Check for math patterns when no Gemini model and no location found
+            user_lower = user_input.lower()
+            pattern_config = CONFIG.get('client_messages', {}).get('pattern_matching', {})
+            
+            # Check for obvious math patterns
+            math_patterns = pattern_config.get('math_patterns', ['calculate', 'what is', 'times'])
+            if any(pattern in user_lower for pattern in math_patterns):
+                # Extract the math expression (remove bot mention and common prefixes)
+                math_expression = user_input
+                # Remove bot mention (including @Weather Bot)
+                if '<@' in math_expression:
+                    math_expression = ' '.join([word for word in math_expression.split() if not word.startswith('<@')])
+                # Also remove @Weather Bot pattern
+                math_expression = re.sub(r'@\w+\s+\w+\s*', '', math_expression)
+                
+                # Remove common prefixes more thoroughly
+                prefixes = pattern_config.get('cleanup_prefixes', ['hey', 'what is', 'calculate', 'what\'s', 'whats'])
+                for prefix in prefixes:
+                    if math_expression.lower().startswith(prefix):
+                        math_expression = math_expression[len(prefix):].strip()
+                
+                # Additional cleanup for question words and punctuation
+                math_expression = math_expression.strip('?!.,')
+                
+                logger.info(f"Using pattern matching fallback for math (no Gemini model): '{math_expression}'")
+                tool_result = self._call_mcp_tool('parse_expression', {'expression': math_expression.strip()})
+                return self._format_response(tool_result, "parse_expression", {'expression': math_expression.strip()}, user_input)
+            
             error_msg = self.error_messages.get('empty_input', 
                 "Please specify a city or zip code for weather information or a mathematical calculation.")
             return error_msg
@@ -678,18 +823,24 @@ class GeminiMCPClient:
                         pattern_config = CONFIG.get('client_messages', {}).get('pattern_matching', {})
                         
                         # Check for obvious math patterns
-                        math_patterns = pattern_config.get('math_patterns', ['calculate', 'what is'])
+                        math_patterns = pattern_config.get('math_patterns', ['calculate', 'what is', 'times'])
                         if any(pattern in user_lower for pattern in math_patterns):
                             # Extract the math expression (remove bot mention and common prefixes)
                             math_expression = user_input
-                            # Remove bot mention
+                            # Remove bot mention (including @Weather Bot)
                             if '<@' in math_expression:
                                 math_expression = ' '.join([word for word in math_expression.split() if not word.startswith('<@')])
-                            # Remove common prefixes
-                            prefixes = pattern_config.get('cleanup_prefixes', ['hey', 'what is'])
+                            # Also remove @Weather Bot pattern
+                            math_expression = re.sub(r'@\w+\s+\w+\s*', '', math_expression)
+                            
+                            # Remove common prefixes more thoroughly
+                            prefixes = pattern_config.get('cleanup_prefixes', ['hey', 'what is', 'calculate', 'what\'s', 'whats'])
                             for prefix in prefixes:
                                 if math_expression.lower().startswith(prefix):
                                     math_expression = math_expression[len(prefix):].strip()
+                            
+                            # Additional cleanup for question words and punctuation
+                            math_expression = math_expression.strip('?!.,')
                             
                             logger.info(f"Using pattern matching fallback for math: '{math_expression}'")
                             return self._call_mcp_tool('parse_expression', {'expression': math_expression.strip()})
@@ -758,18 +909,24 @@ class GeminiMCPClient:
                 pattern_config = CONFIG.get('client_messages', {}).get('pattern_matching', {})
                 
                 # Check for obvious math patterns
-                math_patterns = pattern_config.get('math_patterns', ['calculate', 'what is', '+', '-', '*', '/'])
+                math_patterns = pattern_config.get('math_patterns', ['calculate', 'what is', '+', '-', '*', '/', 'times'])
                 if any(pattern in user_lower for pattern in math_patterns):
                     # Extract the math expression (remove bot mention and common prefixes)
                     math_expression = user_input
-                    # Remove bot mention
+                    # Remove bot mention (including @Weather Bot)
                     if '<@' in math_expression:
                         math_expression = ' '.join([word for word in math_expression.split() if not word.startswith('<@')])
-                    # Remove common prefixes
-                    prefixes = pattern_config.get('cleanup_prefixes', ['hey', 'what is'])
+                    # Also remove @Weather Bot pattern
+                    math_expression = re.sub(r'@\w+\s+\w+\s*', '', math_expression)
+                    
+                    # Remove common prefixes more thoroughly
+                    prefixes = pattern_config.get('cleanup_prefixes', ['hey', 'what is', 'calculate', 'what\'s', 'whats'])
                     for prefix in prefixes:
                         if math_expression.lower().startswith(prefix):
                             math_expression = math_expression[len(prefix):].strip()
+                    
+                    # Additional cleanup for question words and punctuation
+                    math_expression = math_expression.strip('?!.,')
                     
                     logger.info(f"Using pattern matching fallback for math after JSON parse failure: '{math_expression}'")
                     tool_result = self._call_mcp_tool('parse_expression', {'expression': math_expression.strip()})
