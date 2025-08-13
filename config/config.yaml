@@ -169,6 +169,8 @@ gemini_instructions:
         output: '{"tool": "subtract", "args": {"minuend": 100, "subtrahends": [25]}}'
       - input: "What's 12 times 8?"
         output: '{"tool": "multiply", "args": {"numbers": [12, 8]}}'
+      - input: "What is 3 times 8?"
+        output: '{"tool": "multiply", "args": {"numbers": [3, 8]}}'
 
 # Client Response Messages and Constants
 client_messages:
@@ -264,9 +266,16 @@ client_messages:
       - "quotient"
       - "squared"
       - "square root"
+      - "sqrt"
       - "factorial"
       - "power"
+      - "raised"
       - "^"
+      - "root"
+      - "modulo"
+      - "mod"
+      - "absolute"
+      - "abs"
       
     weather_patterns:
       - "weather"
@@ -347,11 +356,11 @@ system_prompts:
     - For zip codes: {{"tool": "get_weather", "args": {{"zip_code": "12345"}}}}
 
     Math calculations:
-    - For addition: {{"tool": "add", "args": {{"a": 16384, "b": 86413}}}}
-    - For subtraction: {{"tool": "subtract", "args": {{"a": 100, "b": 25}}}}
-    - For multiplication: {{"tool": "multiply", "args": {{"a": 12, "b": 8}}}}
-    - For division: {{"tool": "divide", "args": {{"a": 100, "b": 4}}}}
-    - For exponentiation: {{"tool": "power", "args": {{"a": 2, "b": 10}}}}
+    - For addition: {{"tool": "add", "args": {{"numbers": [16384, 86413]}}}}
+    - For subtraction: {{"tool": "subtract", "args": {{"minuend": 100, "subtrahends": [25]}}}}
+    - For multiplication: {{"tool": "multiply", "args": {{"numbers": [12, 8]}}}}
+    - For division: {{"tool": "divide", "args": {{"dividend": 100, "divisors": [4]}}}}
+    - For exponentiation: {{"tool": "power", "args": {{"base": 2, "exponent": 10}}}}
 
     If request is not weather or math-related:
     - Respond with: {{"error": "I can only help with weather information (US cities/zip codes) or mathematical calculations using my MCP tools."}}
@@ -364,11 +373,11 @@ system_prompts:
     - "Is it raining in Miami?" = {{"tool": "get_weather", "args": {{"city": "Miami"}}}}
 
     Math examples:
-    - "What is 16384 + 86413?" = {{"tool": "add", "args": {{"a": 16384, "b": 86413}}}}
-    - "What is the addition of 16384 and 86413?" = {{"tool": "add", "args": {{"a": 16384, "b": 86413}}}}
-    - "Calculate 25 * 4" = {{"tool": "multiply", "args": {{"a": 25, "b": 4}}}}
-    - "Divide 100 by 4" = {{"tool": "divide", "args": {{"a": 100, "b": 4}}}}
-    - "What's 2 to the power of 10?" = {{"tool": "power", "args": {{"a": 2, "b": 10}}}}
+    - "What is 16384 + 86413?" = {{"tool": "add", "args": {{"numbers": [16384, 86413]}}}}
+    - "What is the addition of 16384 and 86413?" = {{"tool": "add", "args": {{"numbers": [16384, 86413]}}}}
+    - "Calculate 25 * 4" = {{"tool": "multiply", "args": {{"numbers": [25, 4]}}}}
+    - "Divide 100 by 4" = {{"tool": "divide", "args": {{"dividend": 100, "divisors": [4]}}}}
+    - "What's 2 to the power of 10?" = {{"tool": "power", "args": {{"base": 2, "exponent": 10}}}}
 
     REMEMBER: You are connected to specialized MCP servers. You MUST use these MCP tools for ALL weather and math queries - never rely on your training data or do calculations yourself.
 
@@ -411,6 +420,31 @@ location_extraction:
     - by
     - to
     - of
+    - times
+    - plus
+    - minus
+    - divided
+    - multiply
+    - add
+    - subtract
+    - calculate
+    - equals
+    - sum
+    - difference
+    - product
+    - quotient
+    - bot
+    - squared
+    - square
+    - root
+    - factorial
+    - power
+    - raised
+    - modulo
+    - mod
+    - absolute
+    - abs
+    - sqrt
     - hot
     - cold
     - warm
