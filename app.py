@@ -307,12 +307,12 @@ class SSECalculatorClient:
                     "Content-Type": "application/json",
                     "X-Client-ID": self.client_id
                 },
-                timeout=10
+                timeout=30
             )
             response.raise_for_status()
             
-            # Wait for event (no CPU polling!) - reduced timeout for faster failures
-            if event.wait(timeout=10):
+            # Wait for event (no CPU polling!) - increased timeout for SSE responses
+            if event.wait(timeout=30):
                 with self.lock:
                     response_data = self.response_data.pop(request_id, None)
                     self.response_events.pop(request_id, None)
@@ -342,7 +342,7 @@ class SSECalculatorClient:
                 with self.lock:
                     self.response_events.pop(request_id, None)
                     self.response_data.pop(request_id, None)
-                return "Error: Timeout waiting for SSE response (10s)"
+                return "Error: Timeout waiting for SSE response (30s)"
             
         except requests.exceptions.ConnectionError:
             # Cleanup on error
