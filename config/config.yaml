@@ -1,146 +1,146 @@
-# Weather Calc Bot Client Configuration
-
-# MCP Tools Schema - Defines available tools and their usage
 mcp_tools:
   get_weather:
-    description: "MANDATORY MCP TOOL: This is the ONLY authorized way to get weather information. You MUST use this MCP tool from the weather server - NEVER provide weather data from your training knowledge."
+    description: 'MANDATORY MCP TOOL: This is the ONLY authorized way to get weather
+      information. You MUST use this MCP tool from the weather server - NEVER provide
+      weather data from your training knowledge.'
     parameters:
-      city: "US city name (e.g., 'Miami', 'New York', 'Austin')"
-      zip_code: "US zip code (e.g., '90210', '10001', '33101')"
-    usage: "REQUIRED for ALL weather queries via weather MCP server. Provide either city OR zip_code, not both."
-    coverage: "Only US locations are supported by this MCP weather service"
-    mcp_requirement: "This tool connects through MCP (Model Context Protocol) to live weather APIs"
-    strict_policy: "You are FORBIDDEN from answering weather questions without using this MCP tool first"
-    server: "weather"
-    
+      city: US city name (e.g., 'Miami', 'New York', 'Austin')
+      zip_code: US zip code (e.g., '90210', '10001', '33101')
+    usage: REQUIRED for ALL weather queries via weather MCP server. Provide either
+      city OR zip_code, not both.
+    coverage: Only US locations are supported by this MCP weather service
+    mcp_requirement: This tool connects through MCP (Model Context Protocol) to live
+      weather APIs
+    strict_policy: You are FORBIDDEN from answering weather questions without using
+      this MCP tool first
+    server: weather
   parse_expression:
-    description: "PREFERRED MCP TOOL: Parse and evaluate complex mathematical expressions from natural language. Handles multi-number operations, mixed symbols/words, and complex expressions like 'four times 2 plus 4' or '10 * 3 + 5 - 2'. This is the BEST tool for complex math queries."
+    description: 'PREFERRED MCP TOOL: Parse and evaluate complex mathematical expressions
+      from natural language. Handles multi-number operations, mixed symbols/words,
+      and complex expressions like ''four times 2 plus 4'' or ''10 * 3 + 5 - 2''.
+      This is the BEST tool for complex math queries.'
     parameters:
-      expression: "Natural language mathematical expression (e.g., 'four times 2 plus 4', '10 * 3 + 5 - 2', 'square root of 25')"
-    usage: "PREFERRED for complex mathematical expressions, multi-number operations, or mixed word/symbol math queries via calculator MCP server"
+      expression: Natural language mathematical expression (e.g., 'four times 2 plus
+        4', '10 * 3 + 5 - 2', 'square root of 25')
+    usage: PREFERRED for complex mathematical expressions, multi-number operations,
+      or mixed word/symbol math queries via calculator MCP server
     examples:
-      - "four times 2 plus 4 = 12"
-      - "10 * 3 + 5 - 2 = 33"
-      - "square root of 25 = 5.0"
-      - "2 to the power of 8 = 256"
-    server: "calculator"
-    
+    - four times 2 plus 4 = 12
+    - 10 * 3 + 5 - 2 = 33
+    - square root of 25 = 5.0
+    - 2 to the power of 8 = 256
+    server: calculator
   add:
-    description: "MCP TOOL: Add multiple numbers together. Can handle 2 or more numbers."
+    description: 'MCP TOOL: Add multiple numbers together. Can handle 2 or more numbers.'
     parameters:
-      numbers: "List of numbers to add (e.g., [16384, 86413] or [1, 2, 3, 4])"
-    usage: "For simple addition of multiple numbers via calculator MCP server"
+      numbers: List of numbers to add (e.g., [16384, 86413] or [1, 2, 3, 4])
+    usage: For simple addition of multiple numbers via calculator MCP server
     examples:
-      - "16384 + 86413 = 102797"
-      - "1 + 2 + 3 + 4 = 10"
-    server: "calculator"
-    
+    - 16384 + 86413 = 102797
+    - 1 + 2 + 3 + 4 = 10
+    server: calculator
   subtract:
-    description: "MCP TOOL: Subtract numbers. First number minus all subsequent numbers."
+    description: 'MCP TOOL: Subtract numbers. First number minus all subsequent numbers.'
     parameters:
-      minuend: "The number to subtract from"
-      subtrahends: "List of numbers to subtract (e.g., [25] or [10, 5, 2])"
-    usage: "For subtraction operations via calculator MCP server"
+      minuend: The number to subtract from
+      subtrahends: List of numbers to subtract (e.g., [25] or [10, 5, 2])
+    usage: For subtraction operations via calculator MCP server
     examples:
-      - "100 - 25 = 75"
-      - "100 - 10 - 5 - 2 = 83"
-    server: "calculator"
-    
+    - 100 - 25 = 75
+    - 100 - 10 - 5 - 2 = 83
+    server: calculator
   multiply:
-    description: "MCP TOOL: Multiply multiple numbers together. Can handle 2 or more numbers."
+    description: 'MCP TOOL: Multiply multiple numbers together. Can handle 2 or more
+      numbers.'
     parameters:
-      numbers: "List of numbers to multiply (e.g., [12, 8] or [2, 3, 4])"
-    usage: "For multiplication of multiple numbers via calculator MCP server"
+      numbers: List of numbers to multiply (e.g., [12, 8] or [2, 3, 4])
+    usage: For multiplication of multiple numbers via calculator MCP server
     examples:
-      - "12 * 8 = 96"
-      - "2 * 3 * 4 = 24"
-    server: "calculator"
-    
+    - 12 * 8 = 96
+    - 2 * 3 * 4 = 24
+    server: calculator
   divide:
-    description: "MCP TOOL: Divide numbers. First number divided by all subsequent numbers."
+    description: 'MCP TOOL: Divide numbers. First number divided by all subsequent
+      numbers.'
     parameters:
-      dividend: "The number to be divided"
-      divisors: "List of numbers to divide by (e.g., [4] or [2, 2])"
-    usage: "For division operations via calculator MCP server"
+      dividend: The number to be divided
+      divisors: List of numbers to divide by (e.g., [4] or [2, 2])
+    usage: For division operations via calculator MCP server
     examples:
-      - "100 / 4 = 25"
-      - "100 / 2 / 2 = 25"
-    server: "calculator"
-    
+    - 100 / 4 = 25
+    - 100 / 2 / 2 = 25
+    server: calculator
   power:
-    description: "MCP TOOL: Calculate exponentiation (base raised to the power of exponent)."
+    description: 'MCP TOOL: Calculate exponentiation (base raised to the power of
+      exponent).'
     parameters:
-      base: "The base number"
-      exponent: "The exponent"
-    usage: "For exponentiation operations via calculator MCP server"
+      base: The base number
+      exponent: The exponent
+    usage: For exponentiation operations via calculator MCP server
     examples:
-      - "2^10 = 1024"
-      - "5^3 = 125"
-    server: "calculator"
-    
+    - 2^10 = 1024
+    - 5^3 = 125
+    server: calculator
   sqrt:
-    description: "MCP TOOL: Calculate square root of a number."
+    description: 'MCP TOOL: Calculate square root of a number.'
     parameters:
-      number: "The number to find square root of"
-    usage: "For square root calculations via calculator MCP server"
+      number: The number to find square root of
+    usage: For square root calculations via calculator MCP server
     examples:
-      - "√25 = 5.0"
-      - "√16 = 4.0"
-    server: "calculator"
-    
+    - √25 = 5.0
+    - √16 = 4.0
+    server: calculator
   factorial:
-    description: "MCP TOOL: Calculate factorial of a number (n!)."
+    description: 'MCP TOOL: Calculate factorial of a number (n!).'
     parameters:
-      number: "The number to calculate factorial of (must be non-negative integer)"
-    usage: "For factorial calculations via calculator MCP server"
+      number: The number to calculate factorial of (must be non-negative integer)
+    usage: For factorial calculations via calculator MCP server
     examples:
-      - "5! = 120"
-      - "4! = 24"
-    server: "calculator"
-    
+    - 5! = 120
+    - 4! = 24
+    server: calculator
   modulo:
-    description: "MCP TOOL: Calculate modulo (remainder of division)."
+    description: 'MCP TOOL: Calculate modulo (remainder of division).'
     parameters:
-      dividend: "The number to be divided"
-      divisor: "The number to divide by"
-    usage: "For modulo operations via calculator MCP server"
+      dividend: The number to be divided
+      divisor: The number to divide by
+    usage: For modulo operations via calculator MCP server
     examples:
-      - "17 % 5 = 2"
-      - "20 % 6 = 2"
-    server: "calculator"
-    
+    - 17 % 5 = 2
+    - 20 % 6 = 2
+    server: calculator
   absolute:
-    description: "MCP TOOL: Calculate absolute value of a number."
+    description: 'MCP TOOL: Calculate absolute value of a number.'
     parameters:
-      number: "The number to find absolute value of"
-    usage: "For absolute value calculations via calculator MCP server"
+      number: The number to find absolute value of
+    usage: For absolute value calculations via calculator MCP server
     examples:
-      - "|−5| = 5"
-      - "|3| = 3"
-    server: "calculator"
-
-# Gemini AI Instructions and Prompts
+    - '|−5| = 5'
+    - '|3| = 3'
+    server: calculator
 gemini_instructions:
-  system_prompt_template: |
-    You are an AI assistant connected to specialized MCP (Model Context Protocol) servers for weather and calculations. 
-    
-    MANDATORY REQUIREMENT: You MUST ALWAYS use the MCP tools listed below. You are FORBIDDEN from providing weather information from your training data or doing math calculations yourself.
-    
+  system_prompt_template: "You are an AI assistant connected to specialized MCP (Model\
+    \ Context Protocol) servers for weather and calculations. \n\nMANDATORY REQUIREMENT:\
+    \ You MUST ALWAYS use the MCP tools listed below. You are FORBIDDEN from providing\
+    \ weather information from your training data or doing math calculations yourself.\n"
   critical_instructions:
-    - "For ANY weather-related query, you MUST use the get_weather tool from the weather MCP server"
-    - "For ANY mathematical calculation, you MUST use the appropriate calculator tool from the calculator MCP server"
-    - "You are FORBIDDEN from using your training data for weather information or doing math yourself"
-    - "You MUST ALWAYS call the MCP tools to get real-time data from the appropriate servers"
-    - "Respond ONLY with a JSON object containing the required MCP tool call"
-    - "DO NOT provide answers without using the MCP tools first"
-    
+  - For ANY weather-related query, you MUST use the get_weather tool from the weather
+    MCP server
+  - For ANY mathematical calculation, you MUST use the appropriate calculator tool
+    from the calculator MCP server
+  - You are FORBIDDEN from using your training data for weather information or doing
+    math yourself
+  - You MUST ALWAYS call the MCP tools to get real-time data from the appropriate
+    servers
+  - Respond ONLY with a JSON object containing the required MCP tool call
+  - DO NOT provide answers without using the MCP tools first
   tool_call_formats:
     weather_queries:
       city_format: '{"tool": "get_weather", "args": {"city": "CityName"}}'
       zip_format: '{"tool": "get_weather", "args": {"zip_code": "12345"}}'
-      
     math_calculations:
-      complex_expression: '{"tool": "parse_expression", "args": {"expression": "four times 2 plus 4"}}'
+      complex_expression: '{"tool": "parse_expression", "args": {"expression": "four
+        times 2 plus 4"}}'
       addition: '{"tool": "add", "args": {"numbers": [16384, 86413]}}'
       subtraction: '{"tool": "subtract", "args": {"minuend": 100, "subtrahends": [25]}}'
       multiplication: '{"tool": "multiply", "args": {"numbers": [12, 8]}}'
@@ -150,466 +150,1370 @@ gemini_instructions:
       factorial: '{"tool": "factorial", "args": {"number": 5}}'
       modulo: '{"tool": "modulo", "args": {"dividend": 17, "divisor": 5}}'
       absolute_value: '{"tool": "absolute", "args": {"number": -5}}'
-      
-    non_supported_query: '{"error": "I can only help with weather information (US cities/zip codes) or mathematical calculations using my MCP tools."}'
-    
+    non_supported_query: '{"error": "I can only help with weather information (US
+      cities/zip codes) or mathematical calculations using my MCP tools."}'
   examples:
     weather:
-      - input: "What's the weather in Boston?"
-        output: '{"tool": "get_weather", "args": {"city": "Boston"}}'
-      - input: "How's the weather in 90210?"
-        output: '{"tool": "get_weather", "args": {"zip_code": "90210"}}'
-      - input: "Is it raining in Miami?"
-        output: '{"tool": "get_weather", "args": {"city": "Miami"}}'
-        
+    - input: What's the weather in Boston?
+      output: '{"tool": "get_weather", "args": {"city": "Boston"}}'
+    - input: How's the weather in 90210?
+      output: '{"tool": "get_weather", "args": {"zip_code": "90210"}}'
+    - input: Is it raining in Miami?
+      output: '{"tool": "get_weather", "args": {"city": "Miami"}}'
     math:
-      - input: "What is 16384 + 86413?"
-        output: '{"tool": "add", "args": {"numbers": [16384, 86413]}}'
-      - input: "Calculate 100 - 25"
-        output: '{"tool": "subtract", "args": {"minuend": 100, "subtrahends": [25]}}'
-      - input: "What's 12 times 8?"
-        output: '{"tool": "multiply", "args": {"numbers": [12, 8]}}'
-      - input: "What is 3 times 8?"
-        output: '{"tool": "multiply", "args": {"numbers": [3, 8]}}'
-
-# Client Response Messages and Constants
+    - input: What is 16384 + 86413?
+      output: '{"tool": "add", "args": {"numbers": [16384, 86413]}}'
+    - input: Calculate 100 - 25
+      output: '{"tool": "subtract", "args": {"minuend": 100, "subtrahends": [25]}}'
+    - input: What's 12 times 8?
+      output: '{"tool": "multiply", "args": {"numbers": [12, 8]}}'
+    - input: What is 3 times 8?
+      output: '{"tool": "multiply", "args": {"numbers": [3, 8]}}'
 client_messages:
-  # Error and status messages
   error_messages:
-    no_weather_data: "No weather data received from the server."
-    no_calculation_result: "No calculation result received from the server."
-    empty_input: "Please specify a city or zip code for weather information or a mathematical calculation."
-    safety_restriction: "I apologize, but I cannot process that request due to content safety restrictions. Please try rephrasing your question about weather or calculations."
-    understanding_error: "I apologize, but I couldn't understand how to help with that request. Please ask about weather information (US cities/zip codes) or mathematical calculations."
-    processing_error: "I apologize, but I had trouble processing that request. Please ask about weather information (US cities/zip codes) or mathematical calculations."
-    gemini_not_configured: "Gemini model is not configured. Please check your GOOGLE_API_KEY."
-    safety_fallback_help: "I had trouble processing your request about '{user_input}'. This seems like a harmless weather or math question. Please try asking: 'What's the weather in [city name]?' or 'Calculate [math expression]'."
-    reactions_read_missing: "Cannot check reactions - missing 'reactions:read' scope. Please add this scope to your Slack app."
-    reactions_write_missing: "Cannot add reaction - missing 'reactions:write' scope. Please add this scope to your Slack app."
-    reaction_already_exists: "Reaction already exists on message {message_ts}"
-    invalid_reaction_name: "Invalid reaction name 'white_check_mark' for message {message_ts}"
-    reaction_failed: "Failed to add reaction to message {message_ts}: {error}"
-    thread_check_failed: "Failed to get thread replies for message {message_ts}: {error}"
-    thread_error: "Error checking thread replies for message {message_ts}: {error}"
-    
-  # Response format messages
+    no_weather_data: No weather data received from the server.
+    no_calculation_result: No calculation result received from the server.
+    empty_input: Please specify a city or zip code for weather information or a mathematical
+      calculation.
+    safety_restriction: I apologize, but I cannot process that request due to content
+      safety restrictions. Please try rephrasing your question about weather or calculations.
+    understanding_error: I apologize, but I couldn't understand how to help with that
+      request. Please ask about weather information (US cities/zip codes) or mathematical
+      calculations.
+    processing_error: I apologize, but I had trouble processing that request. Please
+      ask about weather information (US cities/zip codes) or mathematical calculations.
+    gemini_not_configured: Gemini model is not configured. Please check your GOOGLE_API_KEY.
+    safety_fallback_help: 'I had trouble processing your request about ''{user_input}''.
+      This seems like a harmless weather or math question. Please try asking: ''What''s
+      the weather in [city name]?'' or ''Calculate [math expression]''.'
+    reactions_read_missing: Cannot check reactions - missing 'reactions:read' scope.
+      Please add this scope to your Slack app.
+    reactions_write_missing: Cannot add reaction - missing 'reactions:write' scope.
+      Please add this scope to your Slack app.
+    reaction_already_exists: Reaction already exists on message {message_ts}
+    invalid_reaction_name: Invalid reaction name 'white_check_mark' for message {message_ts}
+    reaction_failed: 'Failed to add reaction to message {message_ts}: {error}'
+    thread_check_failed: 'Failed to get thread replies for message {message_ts}: {error}'
+    thread_error: 'Error checking thread replies for message {message_ts}: {error}'
   response_messages:
-    weather_prefix: "Weather for"
-    temperature_label: "Temperature:"
-    conditions_label: "Conditions:"
-    result_prefix: "The result is:"
-    generic_result: "Result:"
-    weather_data_fallback: "Weather data:"
-    
-  # Tool categories and arrays
+    weather_prefix: Weather for
+    temperature_label: 'Temperature:'
+    conditions_label: 'Conditions:'
+    result_prefix: 'The result is:'
+    generic_result: 'Result:'
+    weather_data_fallback: 'Weather data:'
   tool_categories:
     calculator_tools:
-      - "add"
-      - "subtract" 
-      - "multiply"
-      - "divide"
-      - "power"
-      - "sqrt"
-      - "factorial"
-      - "modulo"
-      - "absolute"
-      - "parse_expression"
-      
+    - add
+    - subtract
+    - multiply
+    - divide
+    - power
+    - sqrt
+    - factorial
+    - modulo
+    - absolute
+    - parse_expression
     weather_tools:
-      - "get_weather"
-      
-    all_calculator_tools: # For easy reference in code
-      - "add"
-      - "subtract"
-      - "multiply"
-      - "divide" 
-      - "power"
-      - "sqrt"
-      - "factorial"
-      - "modulo"
-      - "absolute"
-      - "parse_expression"
-
-  # Fallback system configuration
+    - get_weather
+    all_calculator_tools:
+    - add
+    - subtract
+    - multiply
+    - divide
+    - power
+    - sqrt
+    - factorial
+    - modulo
+    - absolute
+    - parse_expression
   fallback_prompts:
-    simple_prompt_template: |
-      Convert this to a tool call:
+    simple_prompt_template: 'Convert this to a tool call:
+
 
       {user_input}
 
-      If it's about weather, respond: {{"tool": "get_weather", "args": {{"city": "CITYNAME"}}}}
-      If it's math like "four times two", respond: {{"tool": "parse_expression", "args": {{"expression": "four times two"}}}}
+
+      If it''s about weather, respond: {{"tool": "get_weather", "args": {{"city":
+      "CITYNAME"}}}}
+
+      If it''s math like "four times two", respond: {{"tool": "parse_expression",
+      "args": {{"expression": "four times two"}}}}
+
 
       JSON response:
-      
-  # Pattern matching fallback configuration
+
+      '
   pattern_matching:
     math_patterns:
-      - "times"
-      - "plus"
-      - "minus"
-      - "divided"
-      - "multiply"
-      - "add"
-      - "subtract"
-      - "+"
-      - "-"
-      - "*"
-      - "/"
-      - "calculate"
-      - "what is"
-      - "equals"
-      - "="
-      - "sum"
-      - "difference"
-      - "product"
-      - "quotient"
-      - "squared"
-      - "square root"
-      - "sqrt"
-      - "factorial"
-      - "power"
-      - "raised"
-      - "^"
-      - "root"
-      - "modulo"
-      - "mod"
-      - "absolute"
-      - "abs"
-      
+    - '!'
+    - '*'
+    - +
+    - '-'
+    - /
+    - '='
+    - X added to Y
+    - X cubed
+    - X divided by Y
+    - X factorial
+    - X minus Y
+    - X mod Y
+    - X modulo Y
+    - X multiplied by Y
+    - X raised to Y
+    - X squared
+    - X times Y
+    - X to the Y power
+    - X to the power of Y
+    - X to the second power
+    - X to the third power
+    - X!
+    - abs
+    - absolute
+    - absolute value
+    - absolute value of X
+    - absolute_value
+    - add
+    - addition
+    - altogether
+    - angle
+    - angle between
+    - antiderivative
+    - appears most often
+    - approaches
+    - area
+    - area of
+    - area of rectangle
+    - area under
+    - area under curve
+    - arithmetic mean
+    - around the edge
+    - average
+    - average of
+    - binomial
+    - boundary
+    - calculate
+    - capacity
+    - chance
+    - combine
+    - common log
+    - compute
+    - cos
+    - cos X
+    - cosine
+    - cosine function
+    - cosine of
+    - cosine of X
+    - cube
+    - cube of
+    - cube of X
+    - cube root
+    - cube root of
+    - cube root of X
+    - cube_root
+    - cubed
+    - cubic
+    - decreased by
+    - degrees
+    - derivative
+    - derivative of
+    - difference
+    - difference between X and Y
+    - differentiate
+    - distance around
+    - divide
+    - divide X by Y
+    - divide_sign
+    - divided by
+    - division
+    - equal
+    - equals
+    - equals_sign
+    - equation
+    - expand
+    - exponent
+    - exponential
+    - exponentiation
+    - expression
+    - fact
+    - factor
+    - factorial
+    - factorial of
+    - factorial of X
+    - fewer
+    - find
+    - find the value of
+    - find x
+    - groups of
+    - how big
+    - how long
+    - how many
+    - how much
+    - how much space
+    - how tall
+    - how wide
+    - how_much
+    - increased by
+    - integral
+    - integral of
+    - integrate
+    - is equal to
+    - less than
+    - letter
+    - likelihood
+    - limit
+    - limit as X approaches
+    - limit of
+    - ln
+    - log
+    - log of X
+    - logarithm
+    - logarithm of X
+    - magnitude
+    - magnitude of X
+    - mean
+    - mean of
+    - measure of angle
+    - median
+    - median of
+    - middle number
+    - middle value
+    - minus
+    - minus_sign
+    - mod
+    - mode
+    - modulo
+    - modulus
+    - modulus of X
+    - more than
+    - most common
+    - most frequent
+    - multiplication
+    - multiplied by
+    - multiply
+    - multiply X by Y
+    - multiply_sign
+    - n
+    - natural log
+    - natural log of X
+    - negative
+    - odds
+    - of
+    - out of
+    - over
+    - per
+    - perimeter
+    - perimeter of
+    - plus
+    - plus_sign
+    - polynomial
+    - positive
+    - power
+    - probability
+    - probability of
+    - product
+    - product of X and Y
+    - quotient
+    - quotient of X and Y
+    - radians
+    - radical
+    - radical X
+    - raised to
+    - rate of change
+    - ratio
+    - remainder
+    - remainder when X divided by Y
+    - remove
+    - root
+    - rotation
+    - share
+    - show me
+    - simplify
+    - sin
+    - sin X
+    - sine
+    - sine function
+    - sine of
+    - sine of X
+    - slope
+    - slope at
+    - solve
+    - solve for
+    - solve for x
+    - space
+    - space inside
+    - split
+    - sqrt
+    - square
+    - square of
+    - square of X
+    - square root
+    - square root of
+    - square root of X
+    - square_root
+    - squared
+    - subtract
+    - subtraction
+    - sum
+    - sum of X and Y
+    - surface area
+    - take away
+    - tan
+    - tan X
+    - tangent
+    - tangent function
+    - tangent of
+    - tangent of X
+    - tell me
+    - tends to
+    - term
+    - third root
+    - third root of X
+    - times
+    - to the power
+    - to the second power
+    - to the third power
+    - total
+    - trinomial
+    - unknown
+    - variable
+    - volume
+    - volume of
+    - what are the chances
+    - what is
+    - what is X cubed
+    - what is X factorial
+    - what is X plus Y
+    - what is X squared
+    - what is the average
+    - what is the cube root of X
+    - what is the square root of X
+    - what is x
+    - what's
+    - what_is
+    - whats
+    - x
+    - x equals
+    - y
+    - ²
+    - ³
+    - ×
+    - ÷
     weather_patterns:
-      - "weather"
-      - "temperature"
-      - "forecast"
-      - "raining"
-      - "sunny"
-      - "cloudy"
-      
+    - weather
+    - temperature
+    - forecast
+    - raining
+    - sunny
+    - cloudy
     cleanup_prefixes:
-      - "hey"
-      - "what is"
-      - "calculate"
-      - "compute"
-      - "what's"
-      - "whats"
-      - "solve"
-      - "find"
-      - "tell me"
-      - "can you"
-      - "please"
-      
+    - hey
+    - what is
+    - what's the
+    - whats the
+    - what's
+    - whats
+    - calculate
+    - compute
+    - solve
+    - find
+    - find the
+    - tell me
+    - tell me the
+    - can you
+    - please
+    - give me
+    - show me
     skip_words:
-      - "hey"
-      - "weather"
-      - "bot"
-      - "what"
-      - "is"
-      - "the"
-      - "in"
-      - "at"
-      - "for"
-
-# Gemini AI Configuration
+    - hey
+    - weather
+    - bot
+    - what
+    - is
+    - the
+    - in
+    - at
+    - for
+    _note: Mathematical patterns are generated from a comprehensive self-contained
+      database compiled from educational resources, mathematical dictionaries, and
+      academic standards. No external API dependencies required.
 gemini_config:
-  # Generation configuration
   generation_config:
     temperature: 0.1
     top_p: 0.95
     top_k: 40
     max_output_tokens: 2048
     candidate_count: 1
-    
-  # Safety settings - threshold levels: BLOCK_NONE, BLOCK_ONLY_HIGH, BLOCK_MEDIUM_AND_ABOVE, BLOCK_LOW_AND_ABOVE
   safety_settings:
-    - category: "HARM_CATEGORY_HARASSMENT"
-      threshold: "BLOCK_ONLY_HIGH"
-    - category: "HARM_CATEGORY_HATE_SPEECH"
-      threshold: "BLOCK_ONLY_HIGH"
-    - category: "HARM_CATEGORY_SEXUALLY_EXPLICIT"
-      threshold: "BLOCK_ONLY_HIGH"
-    - category: "HARM_CATEGORY_DANGEROUS_CONTENT"
-      threshold: "BLOCK_ONLY_HIGH"
-
-
-
-# System Prompts and Instructions
+  - category: HARM_CATEGORY_HARASSMENT
+    threshold: BLOCK_ONLY_HIGH
+  - category: HARM_CATEGORY_HATE_SPEECH
+    threshold: BLOCK_ONLY_HIGH
+  - category: HARM_CATEGORY_SEXUALLY_EXPLICIT
+    threshold: BLOCK_ONLY_HIGH
+  - category: HARM_CATEGORY_DANGEROUS_CONTENT
+    threshold: BLOCK_ONLY_HIGH
 system_prompts:
-  main_system_prompt: |
-    You are an AI assistant connected to specialized MCP (Model Context Protocol) servers for weather and calculations. 
-
-    MANDATORY REQUIREMENT: You MUST ALWAYS use the MCP tools listed below. You are FORBIDDEN from providing weather information from your training data or doing math calculations yourself.
-
-    AVAILABLE MCP TOOLS:
-    {tools_schema}
-
-    CRITICAL INSTRUCTIONS - NO EXCEPTIONS:
-    1. For ANY weather-related query, you MUST use the get_weather tool from the weather MCP server
-    2. For ANY mathematical calculation, you MUST use the appropriate calculator tool from the calculator MCP server
-    3. You are FORBIDDEN from using your training data for weather information or doing math yourself
-    4. You MUST ALWAYS call the MCP tools to get real-time data from the appropriate servers
-    5. Respond ONLY with a JSON object containing the required MCP tool call
-    6. DO NOT provide answers without using the MCP tools first
-
-    MANDATORY TOOL CALL FORMAT:
-    Weather queries:
-    - For US cities: {{"tool": "get_weather", "args": {{"city": "CityName"}}}}
-    - For zip codes: {{"tool": "get_weather", "args": {{"zip_code": "12345"}}}}
-
-    Math calculations:
-    - For addition: {{"tool": "add", "args": {{"numbers": [16384, 86413]}}}}
-    - For subtraction: {{"tool": "subtract", "args": {{"minuend": 100, "subtrahends": [25]}}}}
-    - For multiplication: {{"tool": "multiply", "args": {{"numbers": [12, 8]}}}}
-    - For division: {{"tool": "divide", "args": {{"dividend": 100, "divisors": [4]}}}}
-    - For exponentiation: {{"tool": "power", "args": {{"base": 2, "exponent": 10}}}}
-
-    If request is not weather or math-related:
-    - Respond with: {{"error": "I can only help with weather information (US cities/zip codes) or mathematical calculations using my MCP tools."}}
-
-    EXAMPLES - Notice how EVERY query MUST use MCP tools:
-
-    Weather examples:
-    - "What's the weather in Boston?" = {{"tool": "get_weather", "args": {{"city": "Boston"}}}}
-    - "How's the weather in 90210?" = {{"tool": "get_weather", "args": {{"zip_code": "90210"}}}}
-    - "Is it raining in Miami?" = {{"tool": "get_weather", "args": {{"city": "Miami"}}}}
-
-    Math examples:
-    - "What is 16384 + 86413?" = {{"tool": "add", "args": {{"numbers": [16384, 86413]}}}}
-    - "What is the addition of 16384 and 86413?" = {{"tool": "add", "args": {{"numbers": [16384, 86413]}}}}
-    - "Calculate 25 * 4" = {{"tool": "multiply", "args": {{"numbers": [25, 4]}}}}
-    - "Divide 100 by 4" = {{"tool": "divide", "args": {{"dividend": 100, "divisors": [4]}}}}
-    - "What's 2 to the power of 10?" = {{"tool": "power", "args": {{"base": 2, "exponent": 10}}}}
-
-    REMEMBER: You are connected to specialized MCP servers. You MUST use these MCP tools for ALL weather and math queries - never rely on your training data or do calculations yourself.
-
-    Only respond with the JSON object, nothing else.
-
-# Location Extraction Configuration
+  main_system_prompt: "You are an AI assistant connected to specialized MCP (Model\
+    \ Context Protocol) servers for weather and calculations. \n\nMANDATORY REQUIREMENT:\
+    \ You MUST ALWAYS use the MCP tools listed below. You are FORBIDDEN from providing\
+    \ weather information from your training data or doing math calculations yourself.\n\
+    \nAVAILABLE MCP TOOLS:\n{tools_schema}\n\nCRITICAL INSTRUCTIONS - NO EXCEPTIONS:\n\
+    1. For ANY weather-related query, you MUST use the get_weather tool from the weather\
+    \ MCP server\n2. For ANY mathematical calculation, you MUST use the appropriate\
+    \ calculator tool from the calculator MCP server\n3. You are FORBIDDEN from using\
+    \ your training data for weather information or doing math yourself\n4. You MUST\
+    \ ALWAYS call the MCP tools to get real-time data from the appropriate servers\n\
+    5. Respond ONLY with a JSON object containing the required MCP tool call\n6. DO\
+    \ NOT provide answers without using the MCP tools first\n\nMANDATORY TOOL CALL\
+    \ FORMAT:\nWeather queries:\n- For US cities: {{\"tool\": \"get_weather\", \"\
+    args\": {{\"city\": \"CityName\"}}}}\n- For zip codes: {{\"tool\": \"get_weather\"\
+    , \"args\": {{\"zip_code\": \"12345\"}}}}\n\nMath calculations:\n- For addition:\
+    \ {{\"tool\": \"add\", \"args\": {{\"numbers\": [16384, 86413]}}}}\n- For subtraction:\
+    \ {{\"tool\": \"subtract\", \"args\": {{\"minuend\": 100, \"subtrahends\": [25]}}}}\n\
+    - For multiplication: {{\"tool\": \"multiply\", \"args\": {{\"numbers\": [12,\
+    \ 8]}}}}\n- For division: {{\"tool\": \"divide\", \"args\": {{\"dividend\": 100,\
+    \ \"divisors\": [4]}}}}\n- For exponentiation: {{\"tool\": \"power\", \"args\"\
+    : {{\"base\": 2, \"exponent\": 10}}}}\n\nIf request is not weather or math-related:\n\
+    - Respond with: {{\"error\": \"I can only help with weather information (US cities/zip\
+    \ codes) or mathematical calculations using my MCP tools.\"}}\n\nEXAMPLES - Notice\
+    \ how EVERY query MUST use MCP tools:\n\nWeather examples:\n- \"What's the weather\
+    \ in Boston?\" = {{\"tool\": \"get_weather\", \"args\": {{\"city\": \"Boston\"\
+    }}}}\n- \"How's the weather in 90210?\" = {{\"tool\": \"get_weather\", \"args\"\
+    : {{\"zip_code\": \"90210\"}}}}\n- \"Is it raining in Miami?\" = {{\"tool\": \"\
+    get_weather\", \"args\": {{\"city\": \"Miami\"}}}}\n\nMath examples:\n- \"What\
+    \ is 16384 + 86413?\" = {{\"tool\": \"add\", \"args\": {{\"numbers\": [16384,\
+    \ 86413]}}}}\n- \"What is the addition of 16384 and 86413?\" = {{\"tool\": \"\
+    add\", \"args\": {{\"numbers\": [16384, 86413]}}}}\n- \"Calculate 25 * 4\" = {{\"\
+    tool\": \"multiply\", \"args\": {{\"numbers\": [25, 4]}}}}\n- \"Divide 100 by\
+    \ 4\" = {{\"tool\": \"divide\", \"args\": {{\"dividend\": 100, \"divisors\": [4]}}}}\n\
+    - \"What's 2 to the power of 10?\" = {{\"tool\": \"power\", \"args\": {{\"base\"\
+    : 2, \"exponent\": 10}}}}\n\nREMEMBER: You are connected to specialized MCP servers.\
+    \ You MUST use these MCP tools for ALL weather and math queries - never rely on\
+    \ your training data or do calculations yourself.\n\nOnly respond with the JSON\
+    \ object, nothing else.\n"
 location_extraction:
-  # Stop words to filter out when extracting locations
   stop_words:
+  - '!'
+  - '%'
+  - (
+  - )
+  - '*'
+  - +
+  - '-'
+  - /
+  - '='
+  - 'True'
+  - X added to Y
+  - X cubed
+  - X divided by Y
+  - X factorial
+  - X minus Y
+  - X mod Y
+  - X modulo Y
+  - X multiplied by Y
+  - X raised to Y
+  - X squared
+  - X times Y
+  - X to the Y power
+  - X to the power of Y
+  - X to the second power
+  - X to the third power
+  - X!
+  - ^
+  - about
+  - abs
+  - absolute
+  - absolute value
+  - absolute value of X
+  - absolute_value
+  - add
+  - addition
+  - all
+  - altogether
+  - amazing
+  - angle
+  - angle between
+  - antiderivative
+  - any
+  - appears most often
+  - approaches
+  - are
+  - area
+  - area of
+  - area of rectangle
+  - area under
+  - area under curve
+  - arithmetic mean
+  - around
+  - around the edge
+  - at
+  - average
+  - average of
+  - awful
+  - bad
+  - beautiful
+  - binomial
+  - bot
+  - boundary
+  - bring
+  - by
+  - calculate
+  - capacity
+  - celsius
+  - chance
+  - city
+  - clothes
+  - clothing
+  - cloudy
+  - coefficient
+  - cold
+  - combine
+  - combined
+  - common log
+  - compute
+  - condition
+  - conditions
+  - cool
+  - cos
+  - cos X
+  - cosine
+  - cosine function
+  - cosine of
+  - cosine of X
+  - country
+  - cube
+  - cube of
+  - cube of X
+  - cube root
+  - cube root of
+  - cube root of X
+  - cube_root
+  - cubed
+  - cubic
+  - currently
+  - decimal
+  - decreased by
+  - degrees
+  - derivative
+  - derivative of
+  - destination
+  - determinant
+  - determine
+  - difference
+  - difference between X and Y
+  - differentiate
+  - distance around
+  - divide
+  - divide X by Y
+  - divide_sign
+  - divided
+  - divided by
+  - division
+  - do
+  - double
+  - dry
+  - enough
+  - equal
+  - equals
+  - equals_sign
+  - equation
+  - evaluate
+  - even
+  - expand
+  - exponent
+  - exponential
+  - exponentiation
+  - expression
+  - fact
+  - factor
+  - factorial
+  - factorial of
+  - factorial of X
+  - fahrenheit
+  - fantastic
+  - fewer
+  - fifth
+  - find
+  - find the value of
+  - find x
+  - for
+  - forecast
+  - fraction
+  - function
+  - gear
+  - give me
+  - go
+  - going
+  - good
+  - great
+  - groups of
+  - half
+  - hot
+  - how
+  - how big
+  - how long
+  - how many
+  - how much
+  - how much space
+  - how tall
+  - how wide
+  - how's
+  - how_much
+  - hows
+  - humid
+  - i
+  - in
+  - increased by
+  - integer
+  - integral
+  - integral of
+  - integrate
+  - is
+  - is equal to
+  - it
+  - items
+  - less than
+  - letter
+  - like
+  - likelihood
+  - limit
+  - limit as X approaches
+  - limit of
+  - ln
+  - log
+  - log of X
+  - logarithm
+  - logarithm of X
+  - lovely
+  - magnitude
+  - magnitude of X
+  - matrix
+  - mean
+  - mean of
+  - measure of angle
+  - median
+  - median of
+  - middle number
+  - middle value
+  - minus
+  - minus_sign
+  - mod
+  - mode
+  - modulo
+  - modulus
+  - modulus of X
+  - more than
+  - most common
+  - most frequent
+  - much
+  - multiplication
+  - multiplied by
+  - multiply
+  - multiply X by Y
+  - multiply_sign
+  - my
+  - n
+  - natural log
+  - natural log of X
+  - near
+  - need
+  - negative
+  - nice
+  - now
+  - odd
+  - odds
+  - of
+  - out of
+  - outside
+  - over
+  - pack
+  - per
+  - percent
+  - percentage
+  - perimeter
+  - perimeter of
+  - place
+  - plus
+  - plus_sign
+  - polynomial
+  - positive
+  - power
+  - pretty
+  - probability
+  - probability of
+  - product
+  - product of X and Y
+  - quadruple
+  - quarter
+  - quite
+  - quotient
+  - quotient of X and Y
+  - radians
+  - radical
+  - radical X
+  - rainy
+  - raised
+  - raised to
+  - rate of change
+  - ratio
+  - really
+  - remainder
+  - remainder when X divided by Y
+  - remove
+  - right
+  - root
+  - rotation
+  - share
+  - show me
+  - simplify
+  - sin
+  - sin X
+  - sine
+  - sine function
+  - sine of
+  - sine of X
+  - slope
+  - slope at
+  - snowy
+  - so
+  - solve
+  - solve for
+  - solve for x
+  - some
+  - space
+  - space inside
+  - split
+  - sqrt
+  - square
+  - square of
+  - square of X
+  - square root
+  - square root of
+  - square root of X
+  - square_root
+  - squared
+  - standard deviation
+  - subtract
+  - subtraction
+  - sum
+  - sum of X and Y
+  - sunny
+  - surface area
+  - take
+  - take away
+  - tan
+  - tan X
+  - tangent
+  - tangent function
+  - tangent of
+  - tangent of X
+  - tell me
+  - temp
+  - temperature
+  - tends to
+  - term
+  - terrible
+  - that
+  - the
+  - there
+  - these
+  - third
+  - third root
+  - third root of X
+  - this
+  - those
+  - times
+  - to
+  - to the power
+  - to the power of
+  - to the second power
+  - to the third power
+  - today
+  - too
+  - total
+  - travel
+  - trinomial
+  - trip
+  - triple
+  - unknown
+  - upcoming
+  - variable
+  - variance
+  - very
+  - visit
+  - volume
+  - volume of
+  - warm
+  - weather
+  - what
+  - what are the chances
+  - what is
+  - what is X cubed
+  - what is X factorial
+  - what is X plus Y
+  - what is X squared
+  - what is the average
+  - what is the cube root of X
+  - what is the square root of X
+  - what is x
+  - what's
+  - what_is
+  - whats
+  - whole
+  - windy
+  - wonderful
+  - x
+  - x equals
+  - y
+  - ²
+  - ³
+  - ×
+  - ÷
+  - √
+  unwanted_words:
+  - Weather
+  - Forecast
+  - Temperature
+  - Like
+  - Right
+  - Now
+  - Today
+  - Currently
+  - Outside
+  - There
+  - This
+  - That
+  - Very
+  - Really
+  - Quite
+  - Pretty
+  - So
+  - Too
+  - Much
+  - All
+  - Some
+  - Any
+  - Amazing
+  - Beautiful
+  - Wonderful
+  - Lovely
+  - Great
+  - Fantastic
+  - Destination
+  - City
+  - Place
+  - Country
+  - Of
+  - The
+  patterns:
+  - name: weather_location
+    pattern: (?:weather|forecast|temperature|conditions?|like|hot|cold|sunny|rainy)\s+(?:in|at|for)\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)
+    description: weather in Baltimore, how's it in Miami
+  - name: location_weather
+    pattern: ([a-zA-ZÀ-ÿ\s]+?)\s+(?:weather|forecast|temperature|conditions?)
+    description: Baltimore weather, Miami forecast
+  - name: conversational
+    pattern: (?:how'?s|what'?s|about)\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)
+    description: how's Baltimore, what about Miami
+  - name: time_based
+    pattern: (?:now|today|currently|right\s+now)\s+(?:in|at|for)\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)
+    description: right now in Baltimore
+  - name: clothing_gear
+    pattern: (?:umbrella|jacket|coat|shorts|boots|hat|sunglasses|sunscreen)\s+.*?(?:in|at|for)\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)
+    description: umbrella/jacket/coat in New York
+  - name: commute
+    pattern: (?:walk|drive|bike|commute|travel|go).*?(?:work|school|home|office).*?(?:in|at|to)\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)
+    description: walk/drive/bike to work in New York
+  - name: travel_packing
+    pattern: (?:pack|bring|take|need).*?(?:clothes|clothing|gear|items?).*?(?:travel|trip|visit|go|going).*?(?:to|in|at)\s+(?:the\s+)?(?:amazing\s+|beautiful\s+|wonderful\s+)?(?:destination\s+of\s+|city\s+of\s+|place\s+of\s+)?([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)
+    description: pack...clothes for travel to Alaska
+  - name: travel_descriptive
+    pattern: (?:travel|trip|visit|vacation|journey|going?).*?(?:to|in|at)\s+(?:the\s+)?(?:amazing\s+|beautiful\s+|wonderful\s+)?(?:destination\s+of\s+|city\s+of\s+|place\s+of\s+)?([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)
+    description: travel to Alaska, trip to Paris, visit to Tokyo
+  - name: destination_descriptive
+    pattern: .*?(?:to)\s+(?:the\s+)?(?:amazing\s+|beautiful\s+|wonderful\s+|lovely\s+|great\s+|fantastic\s+)?(?:destination\s+of\s+|city\s+of\s+|place\s+of\s+|country\s+of\s+)?([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ\s]{1,30})(?:\s*[?.!]|$)
+    description: General 'to [location]' pattern with descriptive phrases
+  - name: general_location
+    pattern: .*?(?:in|at|for)\s+([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ\s]{1,30})(?:\s*[?.!]|$)
+    description: General 'in [location]' pattern for complex sentences
+  - name: simple_location
+    pattern: (?:^|\s)(?:in|at|for|to)\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)
+    description: Simple 'in Baltimore' or 'at Miami'
+math_detection:
+  confidence_threshold: 0.3
+  confidence_weights:
+    numbers: 0.3
+    operations: 0.4
+    question_patterns: 0.2
+    math_context: 0.1
+  confidence_penalties:
+    weather_with_location: 0.1
+    weather_without_location: 0.5
+    times_square_location: 0.2
+  operation_patterns:
+    addition:
+      - '\b(?:add|plus|sum|total|and)\b'
+      - '\+'
+      - '\bsum\s+of\b'
+      - '\btotal\s+of\b'
+    subtraction:
+      - '\b(?:subtract|minus|less|difference)\b'
+      - '-'
+      - '\bdifference\s+(?:of|between)\b'
+      - '\bminus\b'
+      - '\bless\s+than\b'
+    multiplication:
+      - '\b(?:multiply|times|product)\b'
+      - '\*'
+      - '\bproduct\s+of\b'
+      - '\btimes\b'
+      - '\bmultiplied\s+by\b'
+    division:
+      - '\b(?:divide|divided|quotient)\b'
+      - '/'
+      - '\bquotient\s+of\b'
+      - '\bdivided\s+by\b'
+      - '\bover\b'
+    power:
+      - '\b(?:power|exponent|raised|squared|cubed)\b'
+      - '\^'
+      - '\bto\s+the\s+power\s+of\b'
+      - '\braised\s+to\b'
+      - '\bsquare\s+of\b'
+      - '\bcube\s+of\b'
+      - '\bsquared\b'
+      - '\bcubed\b'
+    root:
+      - '\b(?:root|sqrt|square\s+root|cube\s+root)\b'
+      - '\bsquare\s+root\s+of\b'
+      - '\bcube\s+root\s+of\b'
+      - '\broot\s+of\b'
+    special:
+      - '\b(?:factorial|absolute|abs|modulo|mod)\b'
+      - '\bfactorial\s+of\b'
+      - '\babsolute\s+value\s+of\b'
+      - '\bmod\b'
+      - '!'
+  question_patterns:
+    - '\bwhat\s+is\b'
+    - '\bwhat''s\b'
+    - '\bcalculate\b'
+    - '\bcompute\b'
+    - '\bfind\b'
+    - '\bsolve\b'
+    - '\btell\s+me\b'
+    - '\bshow\s+me\b'
+    - '\bgive\s+me\b'
+  number_generation:
+    inflect_range_start: 1
+    inflect_range_end: 101
+    large_numbers: [100, 1000, 1000000]
+    fallback_numbers:
+      - zero
+      - one
+      - two
+      - three
+      - four
+      - five
+      - six
+      - seven
+      - eight
+      - nine
+      - ten
+      - eleven
+      - twelve
+      - thirteen
+      - fourteen
+      - fifteen
+      - sixteen
+      - seventeen
+      - eighteen
+      - nineteen
+      - twenty
+      - thirty
+      - forty
+      - fifty
+      - sixty
+      - seventy
+      - eighty
+      - ninety
+      - hundred
+      - thousand
+      - million
+  ordinal_numbers:
+    - first
+    - second
+    - third
+    - fourth
+    - fifth
+    - sixth
+    - seventh
+    - eighth
+    - ninth
+    - tenth
+  math_context_words:
+    - calculate
+    - compute
+    - solve
+    - result
+    - answer
+    - equals
+    - equal
+  weather_indicators:
     - weather
-    - forecast
     - temperature
-    - temp
-    - conditions
-    - condition
-    - what
-    - whats
-    - "what's"
-    - how
-    - hows
-    - "how's"
-    - is
-    - are
-    - the
-    - it
-    - like
-    - there
-    - today
-    - now
-    - right
-    - currently
-    - outside
+    - forecast
+    - rain
+    - snow
+    - sunny
+    - cloudy
+  location_prepositions:
     - in
     - at
     - for
-    - on
-    - about
-    - around
     - near
-    - by
-    - to
-    - of
-    - times
-    - plus
-    - minus
-    - divided
-    - multiply
-    - add
-    - subtract
-    - calculate
-    - equals
-    - sum
-    - difference
-    - product
-    - quotient
-    - bot
-    - squared
-    - square
-    - root
-    - factorial
-    - power
-    - raised
-    - modulo
-    - mod
-    - absolute
-    - abs
-    - sqrt
-    - hot
-    - cold
-    - warm
-    - cool
-    - sunny
-    - rainy
-    - cloudy
-    - snowy
-    - degrees
-    - fahrenheit
-    - celsius
-    - humid
-    - dry
-    - windy
-    - good
-    - bad
-    - nice
-    - terrible
-    - great
-    - awful
-    - beautiful
-    - this
-    - that
-    - these
-    - those
-    - some
-    - any
-    - all
-    - much
-    - very
-    - really
-    - quite
-    - pretty
-    - so
-    - too
-    - enough
-    - amazing
-    - wonderful
-    - lovely
-    - fantastic
-    - destination
-    - city
-    - place
-    - country
-    - pack
-    - bring
-    - take
-    - need
-    - clothes
-    - clothing
-    - gear
-    - items
-    - travel
-    - trip
-    - visit
-    - go
-    - going
-    - do
-    - i
-    - my
-    - upcoming
-
-  # Unwanted words to remove during location cleaning
-  unwanted_words:
-    - Weather
-    - Forecast
-    - Temperature
-    - Like
-    - Right
-    - Now
-    - Today
-    - Currently
-    - Outside
-    - There
-    - This
-    - That
-    - Very
-    - Really
-    - Quite
-    - Pretty
-    - So
-    - Too
-    - Much
-    - All
-    - Some
-    - Any
-    - Amazing
-    - Beautiful
-    - Wonderful
-    - Lovely
-    - Great
-    - Fantastic
-    - Destination
-    - City
-    - Place
-    - Country
-    - Of
-    - The
-
-  # Regex patterns for location extraction (ordered by priority)
-  patterns:
-    # Direct weather queries
-    - name: "weather_location"
-      pattern: '(?:weather|forecast|temperature|conditions?|like|hot|cold|sunny|rainy)\s+(?:in|at|for)\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)'
-      description: "weather in Baltimore, how's it in Miami"
-    
-    # Location + weather
-    - name: "location_weather"
-      pattern: '([a-zA-ZÀ-ÿ\s]+?)\s+(?:weather|forecast|temperature|conditions?)'
-      description: "Baltimore weather, Miami forecast"
-    
-    # Conversational queries
-    - name: "conversational"
-      pattern: '(?:how''?s|what''?s|about)\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)'
-      description: "how's Baltimore, what about Miami"
-    
-    # Time-based queries
-    - name: "time_based"
-      pattern: '(?:now|today|currently|right\s+now)\s+(?:in|at|for)\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)'
-      description: "right now in Baltimore"
-    
-    # Clothing/gear questions
-    - name: "clothing_gear"
-      pattern: '(?:umbrella|jacket|coat|shorts|boots|hat|sunglasses|sunscreen)\s+.*?(?:in|at|for)\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)'
-      description: "umbrella/jacket/coat in New York"
-    
-    # Commute questions
-    - name: "commute"
-      pattern: '(?:walk|drive|bike|commute|travel|go).*?(?:work|school|home|office).*?(?:in|at|to)\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)'
-      description: "walk/drive/bike to work in New York"
-    
-    # Travel/packing questions with descriptive phrases
-    - name: "travel_packing"
-      pattern: '(?:pack|bring|take|need).*?(?:clothes|clothing|gear|items?).*?(?:travel|trip|visit|go|going).*?(?:to|in|at)\s+(?:the\s+)?(?:amazing\s+|beautiful\s+|wonderful\s+)?(?:destination\s+of\s+|city\s+of\s+|place\s+of\s+)?([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)'
-      description: "pack...clothes for travel to Alaska"
-    
-    # Travel queries with descriptive phrases
-    - name: "travel_descriptive"
-      pattern: '(?:travel|trip|visit|vacation|journey|going?).*?(?:to|in|at)\s+(?:the\s+)?(?:amazing\s+|beautiful\s+|wonderful\s+)?(?:destination\s+of\s+|city\s+of\s+|place\s+of\s+)?([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)'
-      description: "travel to Alaska, trip to Paris, visit to Tokyo"
-    
-    # General destination pattern with descriptive phrases
-    - name: "destination_descriptive"
-      pattern: '.*?(?:to)\s+(?:the\s+)?(?:amazing\s+|beautiful\s+|wonderful\s+|lovely\s+|great\s+|fantastic\s+)?(?:destination\s+of\s+|city\s+of\s+|place\s+of\s+|country\s+of\s+)?([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ\s]{1,30})(?:\s*[?.!]|$)'
-      description: "General 'to [location]' pattern with descriptive phrases"
-    
-    # General location pattern
-    - name: "general_location"
-      pattern: '.*?(?:in|at|for)\s+([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ\s]{1,30})(?:\s*[?.!]|$)'
-      description: "General 'in [location]' pattern for complex sentences"
-    
-    # Simple location pattern
-    - name: "simple_location"
-      pattern: '(?:^|\s)(?:in|at|for|to)\s+([a-zA-ZÀ-ÿ\s]+?)(?:\s*[?.!]|$)'
-      description: "Simple 'in Baltimore' or 'at Miami'"
-
-# Timeout Configuration
+  digit_patterns:
+    - '\b\d+(?:\.\d+)?\b'
+    - '\b\d+/\d+\b'
 timeout_config:
-  # SSE (Server-Sent Events) timeouts for calculator server
-  sse_connection_timeout: 30    # Timeout for establishing SSE connection (seconds)
-  sse_request_timeout: 30       # Timeout for HTTP requests to SSE endpoints (seconds)
-  sse_response_timeout: 30      # Timeout for waiting for SSE responses (seconds)
+  sse_connection_timeout: 30
+  sse_request_timeout: 30
+  sse_response_timeout: 30
+
+# HTTP Client Configuration
+http_client_config:
+  retry:
+    total: 3
+    backoff_factor: 0.3
+    status_forcelist: [500, 502, 503, 504, 429]
+    allowed_methods: ["GET", "POST"]
+  connection_pool:
+    pool_connections: 10
+    pool_maxsize: 20
+  keep_alive:
+    timeout: 30
+  sse_connection:
+    stream: true  # Enable streaming for SSE connections
+
+# Flask Application Configuration
+flask_config:
+  host: "0.0.0.0"
+  default_port: 5002
+  local:
+    debug: true
+    threaded: true
+    use_reloader: true
+  cloud_run:
+    debug: false
+    threaded: true
+    use_reloader: false
+
+# Error Messages Configuration
+error_messages:
+  # Application Startup Errors
+  app_creation_failed: "Failed to create application. Exiting."
+  slack_token_missing: "Slack bot token not configured. Please set SLACK_BOT_TOKEN environment variable."
+  slack_secret_missing: "Slack signing secret not configured. Please set SLACK_SIGNING_SECRET environment variable."
   
-  # HTTP timeouts for weather server
-  http_request_timeout: 15      # Timeout for HTTP requests to weather server (seconds)
+  # Slack API Errors
+  slack_signature_verification_failed: "Slack signing secret not configured"
+  slack_missing_timestamp: "Missing X-Slack-Request-Timestamp header"
+  slack_missing_signature: "Missing X-Slack-Signature header"
+  slack_request_too_old: "Request too old: {time_diff} seconds"
+  slack_invalid_timestamp: "Invalid timestamp format: {error}"
+  slack_signature_error: "Signature verification error: {error}"
+  slack_no_json_data: "No JSON data received"
+  slack_invalid_json: "Invalid JSON"
+  slack_missing_type: "Missing type parameter"
+  slack_missing_challenge: "Missing challenge parameter"
+  slack_missing_event_data: "Missing event data in event_callback"
+  slack_missing_required_fields: "Missing required fields in app_mention event"
+  slack_api_error: "Slack API error: {error}"
+  slack_thread_response_failed: "Failed to send thread response: {error}"
+  slack_reaction_error: "Error adding reaction to message {thread_ts}: {error}"
+  slack_threaded_response_error: "Error sending threaded response: {error}"
+  slack_thread_spam_warning_error: "Error sending thread spam warning: {error}"
+  slack_bot_user_id_failed: "Failed to get bot user ID: {error}"
+  slack_message_check_error: "Error checking if message already processed: {error}"
+  slack_invalid_timestamp_warning: "Invalid event timestamp: {event_ts}, error: {error}"
   
-  # General timeouts
-  gemini_request_timeout: 30    # Timeout for Gemini API requests (seconds)
+  # MCP Service Errors
+  mcp_service_no_content: "Error from service - no content received"
+  mcp_processing_error: "Error processing {message_type}: {error}"
+  mcp_connection_error: "Sorry, I encountered an error: {error}"
+  
+  # Weather Service Errors
+  weather_connection_error: "Error: Could not connect to weather server"
+  weather_timeout_error: "Error: Weather server request timed out"
+  weather_general_error: "Error getting weather: {error}"
+  
+  # Calculator Service Errors
+  calculator_not_connected: "Error: Not connected to calculator SSE server"
+  calculator_connection_error: "Error: Could not connect to calculator SSE server"
+  calculator_timeout_connection: "Error: Timeout connecting to calculator SSE server"
+  calculator_timeout_response: "Error: Timeout waiting for SSE response ({timeout}s)"
+  calculator_no_response: "Error: No response data received"
+  calculator_unknown_error: "Unknown error occurred"
+  calculator_general_error: "Error calling calculator SSE server: {error}"
+  calculator_sse_parse_error: "Failed to parse SSE message: {data}, error: {error}"
+  calculator_sse_handler_error: "SSE message handler error: {error}"
+  calculator_sse_connect_failed: "Failed to connect to calculator SSE server: {error}"
+  
+  # HTTP Client Errors
+  http_config_not_found: "Config file not found, using defaults"
+  http_config_parse_error: "Error parsing config file, using defaults"
+  
+  # Math Detector Errors
+  math_config_load_error: "Could not load config: {error}"
+  math_inflect_pattern_error: "Error generating inflect patterns: {error}"
+  math_pattern_compile_error: "Error compiling patterns: {error}"
+  math_invalid_regex_pattern: "Invalid regex pattern in {category}: {pattern} - {error}"
+  math_invalid_question_pattern: "Invalid question pattern: {pattern} - {error}"
+  math_invalid_number_pattern: "Invalid number pattern: {pattern} - {error}"
+  math_invalid_digit_pattern: "Invalid digit pattern: {pattern} - {error}"
+  
+  # Configuration Errors
+  config_yaml_parse_error: "Error parsing YAML configuration: {error}"
+  
+  # Global Exception Handler Messages
+  global_exception_header: "UNHANDLED EXCEPTION:"
+  global_exception_type: "   Type: {error_type}"
+  global_exception_message: "   Message: {error_message}"
+  global_exception_method: "   Method: {request_method}"
+  global_exception_path: "   Path: {request_path}"
+  global_exception_traceback: "   Full Traceback:"
+  internal_server_error: "Internal server error"
+  bot_unexpected_error: "The bot encountered an unexpected error. Please try again."
+  
+  # Success Response Indicators (for error detection)
+  error_indicators:
+    - "error"
+    - "Error" 
+    - "ERROR"
+    - "timeout"
+    - "Timeout"
+    - "TIMEOUT"
+    - "failed"
+    - "Failed"
+    - "FAILED"
+    - "sorry"
+    - "Sorry"
+    - "SORRY"
+    - "unable"
+    - "Unable"
+    - "UNABLE"
+    - "cannot"
+    - "Cannot"
+    - "CANNOT"
+    - "not found"
+    - "Not found"
+    - "NOT FOUND"
+    - "no data"
+    - "No data"
+    - "NO DATA"
+    - "try again"
+    - "Try again"
+    - "TRY AGAIN"
+    - "encountered an error"
+    - "internal error"
+    - "service unavailable"
+
+# Logging Messages Configuration
+logging_messages:
+  # Application Startup & Initialization
+  app_startup: "Starting MCP Weather Bot Client..."
+  app_initialized: "MCP Weather Bot Client initialized successfully"
+  app_shutdown: "Shutting down client..."
+  weather_service_init: "Initializing weather calculator service..."
+  weather_service_initialized: "Weather Calculator Service initialized"
+  slack_service_init: "Initializing Slack webhook service..."
+  slack_service_initialized: "Slack webhook service initialized"
+  calculator_disconnected: "Calculator MCP service disconnected"
+  log_level_set: "Log level set to: {level}"
+  app_starting: "Starting MCP Weather Bot on {host}:{port} ({environment})"
+  
+  # Security Features
+  security_features_header: "Security Features Enabled:"
+  security_feature_logging: "   - Secure logging with sensitive data masking"
+  security_feature_dedup: "   - Enhanced deduplication and rate limiting"
+  security_feature_validation: "   - Request age validation and signature verification"
+  
+  # Configuration Loading
+  config_loaded: "Configuration loaded for {environment} environment"
+  config_loaded_from: "Configuration loaded from: {path}"
+  config_summary_header: "=== CONFIGURATION SUMMARY ==="
+  config_summary_environment: "Environment: {environment}"
+  config_summary_weather: "Weather MCP Server:"
+  config_summary_weather_host: "  Host: {host}"
+  config_summary_weather_port: "  Port: {port}"
+  config_summary_weather_protocol: "  Protocol: {protocol}"
+  config_summary_weather_url: "  Full URL: {url}"
+  config_summary_calculator: "Calculator MCP Server:"
+  config_summary_calc_host: "  Host: {host}"
+  config_summary_calc_port: "  Port: {port}"
+  config_summary_calc_protocol: "  Protocol: {protocol}"
+  config_summary_calc_url: "  Full URL: {url}"
+  config_summary_timeouts: "Timeouts:"
+  config_summary_timeout_item: "  {key}: {value}s"
+  config_summary_gemini_model: "Gemini Model: {model}"
+  config_summary_gemini_available: "Gemini Available: {available}"
+  config_summary_footer: "==============================="
+  
+  # Gemini Model
+  gemini_model_initialized: "Gemini model initialized: {model}"
+  gemini_model_failed: "Failed to initialize Gemini model: {error}"
+  gemini_model_not_specified: "No Gemini model specified, using pattern matching only"
+  gemini_api_key_not_configured: "Gemini API key not configured"
+  gemini_raw_response: "Gemini raw response: {response}"
+  gemini_tool_call: "Gemini tool call: {tool_name} with args: {arguments}"
+  gemini_no_tool_call: "Gemini didn't return tool call, using pattern matching fallback"
+  
+  # Pattern Matching & Math Detection
+  patterns_loaded_weather: "Loaded {count} weather patterns"
+  patterns_loaded_math: "Loaded {count} math patterns"
+  patterns_loaded_stop_words: "Loaded {count} stop words"
+  pattern_matching_fallback: "Using pattern matching fallback"
+  math_detection_config_loaded: "Loaded math detection config: {operation_count} operation types, {total_patterns} total patterns, {stop_words} stop words"
+  math_detection_fallback_config: "Loading fallback math detection configuration"
+  math_detection_robust_no_gemini: "Using robust math detection (no Gemini model): '{expression}' (confidence: {confidence:.2f}, patterns: {patterns})"
+  math_detection_robust_fallback: "Using robust math detection (fallback): '{expression}' (confidence: {confidence:.2f}, patterns: {patterns})"
+  location_extracted: "Extracted location: '{location}' from '{input}'"
+  
+  # Slack Events & Processing
+  slack_events_called: "Slack events endpoint called"
+  slack_request_type: "Request type: {type}"
+  slack_event_type: "Event type: {type}"
+  slack_url_verification: "URL verification challenge received"
+  slack_unhandled_request: "Unhandled request type: {type}"
+  slack_unhandled_event: "Unhandled event type: {type}"
+  slack_app_mention_thread: "App mention in existing thread from user {user}"
+  slack_app_mention_processed: "App mention already processed: {event_ts}"
+  slack_dm_thread: "DM in existing thread from user {user}"
+  slack_dm_processed: "DM already processed: {event_ts}"
+  slack_message_processed: "Message already processed: {key}"
+  slack_processing_message: "Processing {message_type} from user {user} in channel {channel}"
+  slack_sending_response: "Sending threaded response: {result}"
+  slack_message_marked_processed: "Marked message as processed: {key}"
+  slack_thread_sent: "Thread response sent successfully to {channel}"
+  slack_reaction_added: "Green tick reaction added to message {thread_ts}"
+  slack_fallback_sent: "Fallback message sent successfully to {channel}"
+  slack_spam_warning_sent: "Sent thread spam warning to user {user} in channel {channel}"
+  slack_message_too_old: "Message too old ({age:.1f}s), ignoring"
+  
+  # Rate Limiting & Security
+  rate_limit_user: "Rate limited user {user} - ignoring request"
+  rate_limit_user_dm: "Rate limited user {user} - ignoring DM"
+  rate_limit_reset: "Rate limit reset for user: {user_id}"
+  rate_limit_cleanup: "Cleaned up rate limit data for {count} users"
+  security_event: "SECURITY EVENT: {event_type} - {data}"
+  input_too_long: "Input too long: {length} > {max_length}"
+  message_dedup_processed: "Message already processed: {key}"
+  message_dedup_marked: "Marked message as processed: {key}"
+  message_dedup_cleanup: "Cleaned up {count} expired messages"
+  request_too_old: "Request too old: {time_diff} seconds"
+  
+  # SSE & Calculator Service
+  sse_connecting: "Connecting to calculator SSE server: {url}"
+  sse_connection_established: "SSE connection established with calculator server (client_id: {client_id})"
+  sse_event_received: "SSE event: {event}, data: {data}"
+  sse_connection_confirmed_json: "SSE connection confirmed: {data}"
+  sse_connection_confirmed: "SSE connection confirmed (non-JSON data)"
+  sse_signaled_event: "Signaled event for request {request_id}"
+  sse_heartbeat_json: "SSE heartbeat received: {timestamp}"
+  sse_heartbeat: "SSE heartbeat received"
+  sse_unknown_event: "Unknown SSE event type: {event}"
+  
+  # HTTP Client
+  http_client_initialized: "HTTP client initialized with config-based settings"
+  http_config_not_found: "Config file not found, using defaults"
+  http_config_parse_error: "Error parsing config file, using defaults"
+  
+  # Token & Authentication
+  token_present: "{token_name} present: {masked_token}"
+  token_not_configured: "{token_name} not configured or empty"
+  safe_debug_log: "{message}: {masked_data}"
+  bot_user_id_failed: "Failed to get bot user ID: {error}"
+  
+  # Warning Messages
+  warning_messages:
+    gemini_init_failed: "Failed to initialize Gemini model: {error}"
+    math_config_load_failed: "Could not load config: {error}"
+    inflect_pattern_error: "Error generating inflect patterns: {error}"
+    invalid_regex_pattern: "Invalid regex pattern in {category}: {pattern} - {error}"
+    invalid_question_pattern: "Invalid question pattern: {pattern} - {error}"
+    invalid_number_pattern: "Invalid number pattern: {pattern} - {error}"
+    invalid_digit_pattern: "Invalid digit pattern: {pattern} - {error}"
+    sse_parse_failed: "Failed to parse SSE message: {data}, error: {error}"
+    unhandled_request_type: "Unhandled request type: {type}"
+    unhandled_event_type: "Unhandled event type: {type}"
+    user_rate_limited: "User {user_id} rate limited: {count} requests in current minute"
+    invalid_event_timestamp: "Invalid event timestamp: {event_ts}, error: {error}"
+    coverage_report_read_failed: "Could not read coverage report: {error}"
+    
+  # Debug Messages  
+  debug_messages:
+    raw_payload_length: "Raw payload length: {length}"
+    message_content: "Message: {text}"
+    sse_event_debug: "SSE event: {event}, data: {data}"
+    sse_connection_confirmed_debug: "SSE connection confirmed: {data}"
+    sse_signaled_event_debug: "Signaled event for request {request_id}"
+    sse_heartbeat_debug: "SSE heartbeat received: {timestamp}"
+    gemini_raw_response_debug: "Gemini raw response: {response}"
+    patterns_loaded_weather_debug: "Loaded {count} weather patterns"
+    patterns_loaded_math_debug: "Loaded {count} math patterns" 
+    patterns_loaded_stop_words_debug: "Loaded {count} stop words"
+    message_dedup_debug: "Message already processed: {key}"
+    message_marked_debug: "Marked message as processed: {key}"
+    message_cleanup_debug: "Cleaned up {count} expired messages"
+    rate_limit_cleanup_debug: "Cleaned up rate limit data for {count} users"
+    token_present_debug: "{token_name} present: {masked_token}"
+    safe_debug_log_debug: "{message}: {masked_data}"
+
+  http_request_timeout: 15
+  gemini_request_timeout: 30
+
+# Utility constants and formatting
+utilities:
+  # File size formatting constants
+  size_names: ["B", "KB", "MB", "GB", "TB"]
+  
+  # Token masking configuration for secure logging
+  token_masking:
+    min_length_for_masking: 8  # Minimum token length to apply masking
+    prefix_chars: 4            # Number of characters to show at start
+    suffix_chars: 4            # Number of characters to show at end
+  
+  # Standard HTTP/HTTPS ports (ports that don't need to be explicitly shown in URLs)
+  standard_ports: ["80", "443"]
+  
+  # Request processing configuration
+  request_processing:
+    force_json_parsing: true  # Force JSON parsing even with incorrect content-type
+  
+  # Flask application defaults
+  flask_defaults:
+    threaded: true           # Enable threading for Flask app
+    debug_local: true        # Enable debug mode for local environment
+    use_reloader_local: true # Enable auto-reloader for local environment
+  
+  # Connection and state defaults
+  connection_defaults:
+    initial_connected_state: false  # Initial connection state for services
+    calc_connected_default: false   # Default calculator connection state
+  
+  # UI and display constants
+  ui_constants:
+    success_emoji: "white_check_mark"  # Emoji for successful operations
+  
+  # HTTP and API constants
+  http_constants:
+    slack_events_endpoint: "/slack/events"  # Slack webhook endpoint
+    health_endpoint: "/health"              # Health check endpoint
+    post_method: "POST"                     # HTTP POST method
+    get_method: "GET"                       # HTTP GET method
+  
+  # Service configuration constants
+  service_constants:
+    message_expiry_seconds: 300    # Message expiry time (5 minutes)
+    min_request_interval: 1        # Minimum seconds between requests per user
